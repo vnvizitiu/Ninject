@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="NinjectModule.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,14 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Modules
 {
     using System;
     using System.Collections.Generic;
+
+    using Ninject.Infrastructure;
     using Ninject.Infrastructure.Language;
     using Ninject.Planning.Bindings;
     using Ninject.Syntax;
@@ -34,39 +34,21 @@ namespace Ninject.Modules
     /// </summary>
     public abstract class NinjectModule : BindingRoot, INinjectModule
     {
+        private readonly List<IBinding> bindings;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="NinjectModule"/> class.
         /// </summary>
         protected NinjectModule()
         {
-            this.Bindings = new List<IBinding>();
+            this.bindings = new List<IBinding>();
         }
 
-        /// <summary>
-        /// Gets the ninject settings.
-        /// </summary>
-        /// <value>The ninject settings.</value>
-        public override INinjectSettings Settings
-        {
-            get
-            {
-                return this.KernelConfiguration.Settings;
-            }
-        }
-
-#pragma warning disable 618
         /// <summary>
         /// Gets the kernel that the module is loaded into.
         /// </summary>
         [Obsolete]
         public IKernel Kernel { get; private set; }
-#pragma warning restore 618
-
-        /// <summary>
-        /// Gets the kernel configuration that the module is loaded into.
-        /// </summary>
-        /// <value>The kernel configuration that the module is loaded into.</value>
-        public IKernelConfiguration KernelConfiguration { get; private set; }
 
         /// <summary>
         /// Gets the module's name. Only a single module with a given name can be loaded at one time.
@@ -79,26 +61,44 @@ namespace Ninject.Modules
         /// <summary>
         /// Gets the bindings that were registered by the module.
         /// </summary>
-        public ICollection<IBinding> Bindings { get; private set; }
+        public ICollection<IBinding> Bindings
+        {
+            get { return this.bindings; }
+        }
+
+        /// <summary>
+        /// Gets the kernel configuration that the module is loaded into.
+        /// </summary>
+        /// <value>The kernel configuration that the module is loaded into.</value>
+        protected internal IKernelConfiguration KernelConfiguration { get; private set; }
 
         /// <summary>
         /// Called when the module is loaded into a kernel.
         /// </summary>
         /// <param name="kernelConfiguration">The kernel configuration that is loading the module.</param>
-        public void OnLoad(IKernelConfiguration kernelConfiguration)
+        /// <param name="settings">The ninject settings.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="kernelConfiguration"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="settings"/> is <see langword="null"/>.</exception>
+        public void OnLoad(IKernelConfiguration kernelConfiguration, INinjectSettings settings)
         {
+            Ensure.ArgumentNotNull(kernelConfiguration, nameof(kernelConfiguration));
+            Ensure.ArgumentNotNull(settings, nameof(settings));
+
             this.KernelConfiguration = kernelConfiguration;
+            this.Components = this.KernelConfiguration.Components;
+            this.Settings = settings;
+
             this.Load();
         }
 
         /// <summary>
         /// Called when the module is unloaded from a kernel.
         /// </summary>
-        /// <param name="kernelConfiguration">The kernel configuration that is unloading the module.</param>
-        public void OnUnload(IKernelConfiguration kernelConfiguration)
+        public void OnUnload()
         {
             this.Unload();
-            this.Bindings.Map(this.KernelConfiguration.RemoveBinding);
+            this.bindings.ForEach(binding => this.KernelConfiguration.RemoveBinding(binding));
+            this.Components = null;
             this.KernelConfiguration = null;
         }
 
@@ -133,6 +133,7 @@ namespace Ninject.Modules
         /// Unregisters all bindings for the specified service.
         /// </summary>
         /// <param name="service">The service to unbind.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
         public override void Unbind(Type service)
         {
             this.KernelConfiguration.Unbind(service);
@@ -142,20 +143,22 @@ namespace Ninject.Modules
         /// Registers the specified binding.
         /// </summary>
         /// <param name="binding">The binding to add.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
         public override void AddBinding(IBinding binding)
         {
             this.KernelConfiguration.AddBinding(binding);
-            this.Bindings.Add(binding);
+            this.bindings.Add(binding);
         }
 
         /// <summary>
         /// Unregisters the specified binding.
         /// </summary>
         /// <param name="binding">The binding to remove.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
         public override void RemoveBinding(IBinding binding)
         {
             this.KernelConfiguration.RemoveBinding(binding);
-            this.Bindings.Remove(binding);
+            this.bindings.Remove(binding);
         }
     }
 }

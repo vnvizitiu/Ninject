@@ -18,17 +18,14 @@ namespace Ninject.Tests.Unit.PropertyInjectionDirectiveTests
         [Fact]
         public void CreatesTargetForProperty()
         {
-#if !WINRT
             var method = typeof(Dummy).GetProperty("Foo");
-#else
-            var method = typeof(Dummy).GetRuntimeProperty("Foo");
-#endif
+
             PropertyInjector injector = delegate { };
 
-            directive = new PropertyInjectionDirective(method, injector);
+            this.directive = new PropertyInjectionDirective(method, injector);
 
-            directive.Target.Name.Should().Be("Foo");
-            directive.Target.Type.Should().Be(typeof(int));
+            this.directive.Target.Name.Should().Be("Foo");
+            this.directive.Target.Type.Should().Be(typeof(int));
         }
     }
 

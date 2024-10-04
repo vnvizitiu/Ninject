@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="Request.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,13 +17,14 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
+
+    using Ninject.Infrastructure;
     using Ninject.Infrastructure.Introspection;
     using Ninject.Parameters;
     using Ninject.Planning.Bindings;
@@ -43,13 +42,18 @@ namespace Ninject.Activation
         /// <param name="constraint">The constraint that will be applied to filter the bindings used for the request.</param>
         /// <param name="parameters">The parameters that affect the resolution.</param>
         /// <param name="scopeCallback">The scope callback, if an external scope was specified.</param>
-        /// <param name="isOptional"><c>True</c> if the request is optional; otherwise, <c>false</c>.</param>
-        /// <param name="isUnique"><c>True</c> if the request should return a unique result; otherwise, <c>false</c>.</param>
-        public Request(Type service, Func<IBindingMetadata, bool> constraint, IEnumerable<IParameter> parameters, Func<object> scopeCallback, bool isOptional, bool isUnique)
+        /// <param name="isOptional"><see langword="true"/> if the request is optional; otherwise, <see langword="false"/>.</param>
+        /// <param name="isUnique"><see langword="true"/> if the request should return a unique result; otherwise, <see langword="false"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
+        public Request(Type service, Func<IBindingMetadata, bool> constraint, IReadOnlyList<IParameter> parameters, Func<object> scopeCallback, bool isOptional, bool isUnique)
         {
+            Ensure.ArgumentNotNull(service, nameof(service));
+            Ensure.ArgumentNotNull(parameters, nameof(parameters));
+
             this.Service = service;
             this.Constraint = constraint;
-            this.Parameters = parameters.ToList();
+            this.Parameters = parameters;
             this.ScopeCallback = scopeCallback;
             this.ActiveBindings = new Stack<IBinding>();
             this.Depth = 0;
@@ -72,7 +76,7 @@ namespace Ninject.Activation
             this.Target = target;
             this.Constraint = target.Constraint;
             this.IsOptional = target.IsOptional;
-            this.Parameters = parentContext.Parameters.Where(p => p.ShouldInherit).ToList();
+            this.Parameters = parentContext.Parameters.GetShouldInheritParameters();
             this.ScopeCallback = scopeCallback;
             this.ActiveBindings = new Stack<IBinding>(this.ParentRequest.ActiveBindings);
             this.Depth = this.ParentRequest.Depth + 1;
@@ -106,7 +110,7 @@ namespace Ninject.Activation
         /// <summary>
         /// Gets the parameters that affect the resolution.
         /// </summary>
-        public ICollection<IParameter> Parameters { get; private set; }
+        public IReadOnlyList<IParameter> Parameters { get; private set; }
 
         /// <summary>
         /// Gets the stack of bindings which have been activated by either this request or its ancestors.
@@ -126,20 +130,14 @@ namespace Ninject.Activation
         /// <summary>
         /// Gets or sets a value indicating whether the request is for a single service.
         /// </summary>
-        public bool IsUnique
-        {
-            get; set;
-        }
+        public bool IsUnique { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether the request should force to return a unique value even if the request is optional.
         /// If this value is set true the request will throw an ActivationException if there are multiple satisfying bindings rather
         /// than returning null for the request is optional. For none optional requests this parameter does not change anything.
         /// </summary>
-        public bool ForceUnique
-        {
-            get; set;
-        }
+        public bool ForceUnique { get; set; }
 
         /// <summary>
         /// Gets the callback that resolves the scope for the request, if an external scope was provided.
@@ -150,7 +148,9 @@ namespace Ninject.Activation
         /// Determines whether the specified binding satisfies the constraints defined on this request.
         /// </summary>
         /// <param name="binding">The binding.</param>
-        /// <returns><c>True</c> if the binding satisfies the constraints; otherwise <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/>  if the binding satisfies the constraints; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Matches(IBinding binding)
         {
             return this.Constraint == null || this.Constraint(binding.Metadata);
@@ -159,7 +159,9 @@ namespace Ninject.Activation
         /// <summary>
         /// Gets the scope if one was specified in the request.
         /// </summary>
-        /// <returns>The object that acts as the scope.</returns>
+        /// <returns>
+        /// The object that acts as the scope.
+        /// </returns>
         public object GetScope()
         {
             return this.ScopeCallback == null ? null : this.ScopeCallback();
@@ -171,7 +173,9 @@ namespace Ninject.Activation
         /// <param name="service">The service that is being requested.</param>
         /// <param name="parentContext">The context in which the request was made.</param>
         /// <param name="target">The target that will receive the injection.</param>
-        /// <returns>The child request.</returns>
+        /// <returns>
+        /// The child request.
+        /// </returns>
         public IRequest CreateChild(Type service, IContext parentContext, ITarget target)
         {
             return new Request(parentContext, service, target, this.ScopeCallback);
@@ -180,7 +184,9 @@ namespace Ninject.Activation
         /// <summary>
         /// Formats this object into a meaningful string representation.
         /// </summary>
-        /// <returns>The request formatted as string.</returns>
+        /// <returns>
+        /// The request formatted as string.
+        /// </returns>
         public override string ToString()
         {
             return this.Format();

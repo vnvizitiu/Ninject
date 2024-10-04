@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="INinjectSettings.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,11 +17,12 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject
 {
     using System;
+
     using Ninject.Activation;
 
     /// <summary>
@@ -46,7 +45,6 @@ namespace Ninject
         /// </summary>
         Func<IContext, object> DefaultScopeCallback { get; }
 
-        #if !NO_ASSEMBLY_SCANNING
         /// <summary>
         /// Gets a value indicating whether the kernel should automatically load extensions at startup.
         /// </summary>
@@ -56,7 +54,6 @@ namespace Ninject
         /// Gets the paths that should be searched for extensions.
         /// </summary>
         string[] ExtensionSearchPatterns { get; }
-        #endif //!NO_ASSEMBLY_SCANNING
 
         /// <summary>
         /// Gets a value indicating whether Ninject should use reflection-based injection instead of
@@ -67,6 +64,7 @@ namespace Ninject
         /// <summary>
         /// Gets or sets a value indicating whether Ninject should inject non public members.
         /// </summary>
+        [Obsolete("Injecting non public members is not recommended. Make the member(s) public instead.")]
         bool InjectNonPublic { get; set; }
 
         /// <summary>
@@ -76,47 +74,62 @@ namespace Ninject
         /// Activating this setting has an impact on the performance. It is recommended not
         /// to use this feature and use constructor injection instead.
         /// </remarks>
+        [Obsolete("Injecting parent private properties is not recommended. Use constructor injection instead.")]
         bool InjectParentPrivateProperties { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether the activation cache is disabled.
+        /// </summary>
+        /// <remarks>
         /// If the activation cache is disabled less memory is used. But in some cases
         /// instances are activated or deactivated multiple times. e.g. in the following scenario:
+        /// <code>
         /// Bind{A}().ToSelf();
         /// Bind{IA}().ToMethod(ctx => kernel.Get{IA}();
-        /// </summary>
+        /// </code>
+        /// </remarks>
         /// <value>
-        ///     <c>true</c> if activation cache is disabled; otherwise, <c>false</c>.
+        /// <see langword="true"/> if activation cache is disabled; otherwise, <see langword="false"/>.
+        /// The default is <see langword="false"/>.
         /// </value>
         bool ActivationCacheDisabled { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether Null is a valid value for injection.
-        /// By default this is disabled and whenever a provider returns null an exception is thrown.
+        /// Gets or sets a value indicating whether <see langword="null"/> is a valid value for injection.
         /// </summary>
-        /// <value><c>true</c> if null is allowed as injected value otherwise false.</value>
+        /// <value>
+        /// <see langword="true"/> if <see langword="null"/> is allowed as injected value; otherwise, <see langword="false"/>.
+        /// The default is <see langword="false"/>.
+        /// </value>
+        /// <remarks>
+        /// When <see langword="false"/>, an <see cref="ActivationException"/> is thrown whenever a provider returns <see langword="null"/>.
+        /// </remarks>
         bool AllowNullInjection { get; set; }
 
         /// <summary>
-        /// Gets the value for the specified key.
+        /// Gets or sets a value indicating whether method injection should enabled.
         /// </summary>
-        /// <typeparam name="T">The type of value to return.</typeparam>
-        /// <param name="key">The setting's key.</param>
-        /// <param name="defaultValue">The value to return if no setting is available.</param>
-        /// <returns>The value, or the default value if none was found.</returns>
-        T Get<T>(string key, T defaultValue);
+        /// <value>
+        /// <see langword="true"/> if method injection is enabled; otherwise, <see langword="false"/>. The default
+        /// is <see langword="true"/>.
+        /// </value>
+        bool MethodInjection { get; set; }
 
         /// <summary>
-        /// Sets the value for the specified key.
+        /// Gets or sets a value indicating whether property injection should enabled.
         /// </summary>
-        /// <param name="key">The setting's key.</param>
-        /// <param name="value">The setting's value.</param>
-        void Set(string key, object value);
+        /// <value>
+        /// <see langword="true"/> if property injection is enabled; otherwise, <see langword="false"/>. The default
+        /// is <see langword="true"/>.
+        /// </value>
+        bool PropertyInjection { get; set; }
 
         /// <summary>
-        /// Clones the ninject settings into a new instance
+        /// Gets or sets a value indicating whether the old (&lt;= 3.3.4) behavior of <see cref="IServiceProvider.GetService(Type)"/>
+        /// should be used which thorows an exception if the requested service cannot be found. Note that the documentation
+        /// of that method https://docs.microsoft.com/en-us/dotnet/api/system.iserviceprovider.getservice?view=netframework-4.6.2
+        /// states that the method should return <see langword="null"/> if there is no such service.
         /// </summary>
-        /// <returns>A new instance of the ninject settings</returns>
-        INinjectSettings Clone();
+        bool ThrowOnGetServiceNotFound { get; set; }
     }
 }

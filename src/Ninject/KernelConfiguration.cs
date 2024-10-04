@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="KernelConfiguration.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,13 +17,12 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Reflection;
 
@@ -34,7 +31,6 @@ namespace Ninject
     using Ninject.Activation.Strategies;
     using Ninject.Components;
     using Ninject.Infrastructure;
-    using Ninject.Infrastructure.Introspection;
     using Ninject.Infrastructure.Language;
     using Ninject.Injection;
     using Ninject.Modules;
@@ -47,22 +43,27 @@ namespace Ninject
     using Ninject.Syntax;
 
     /// <summary>
-    /// The kernel configuration
+    /// The kernel configuration.
     /// </summary>
     public class KernelConfiguration : BindingRoot, IKernelConfiguration
     {
-        private readonly INinjectSettings settings;
+        /// <summary>
+        /// The service-bindings dictionary.
+        /// </summary>
+        private readonly Dictionary<Type, ICollection<IBinding>> bindings = new Dictionary<Type, ICollection<IBinding>>(new ReferenceEqualityTypeComparer());
 
-        private readonly Multimap<Type, IBinding> bindings = new Multimap<Type, IBinding>();
-
+        /// <summary>
+        /// The ninject modules.
+        /// </summary>
         private readonly Dictionary<string, INinjectModule> modules = new Dictionary<string, INinjectModule>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="KernelConfiguration"/> class.
         /// </summary>
         /// <param name="modules">The modules to load into the kernel.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
         public KernelConfiguration(params INinjectModule[] modules)
-            : this(new ComponentContainer(), new NinjectSettings(), modules)
+            : this(new NinjectSettings(), modules)
         {
         }
 
@@ -71,8 +72,10 @@ namespace Ninject
         /// </summary>
         /// <param name="settings">The configuration to use.</param>
         /// <param name="modules">The modules to load into the kernel.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="settings"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
         public KernelConfiguration(INinjectSettings settings, params INinjectModule[] modules)
-            : this(new ComponentContainer(), settings, modules)
+            : this(new ComponentContainer(settings, new ExceptionFormatter()), settings, modules)
         {
         }
 
@@ -82,13 +85,16 @@ namespace Ninject
         /// <param name="components">The component container to use.</param>
         /// <param name="settings">The configuration to use.</param>
         /// <param name="modules">The modules to load into the kernel.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="components"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="settings"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
         public KernelConfiguration(IComponentContainer components, INinjectSettings settings, params INinjectModule[] modules)
         {
-            Contract.Requires(components != null);
-            Contract.Requires(settings != null);
-            Contract.Requires(modules != null);
+            Ensure.ArgumentNotNull(components, nameof(components));
+            Ensure.ArgumentNotNull(settings, nameof(settings));
+            Ensure.ArgumentNotNull(modules, nameof(modules));
 
-            this.settings = settings;
+            this.Settings = settings;
 
             this.Components = components;
 
@@ -96,68 +102,82 @@ namespace Ninject
 
             this.AddComponents();
 
-#if !NO_ASSEMBLY_SCANNING
-            if (this.settings.LoadExtensions)
+            if (this.Settings.LoadExtensions)
             {
-                this.Load(this.settings.ExtensionSearchPatterns);
+                this.Load(this.Settings.ExtensionSearchPatterns);
             }
-#endif
+
             this.Load(modules);
         }
 
-        /// <inheritdoc />
-        public IComponentContainer Components { get; private set; }
-
-        /// <inheritdoc />
-        public override INinjectSettings Settings
-        {
-            get
-            {
-                return this.settings;
-            }
-        }
-
-        /// <inheritdoc />
+        /// <summary>
+        /// Unregisters all bindings for the specified service.
+        /// </summary>
+        /// <param name="service">The service to unbind.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
         public override void Unbind(Type service)
         {
-            Contract.Requires(service != null);
+            Ensure.ArgumentNotNull(service, nameof(service));
 
-            this.bindings.RemoveAll(service);
+            this.bindings.Remove(service);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Registers the specified binding.
+        /// </summary>
+        /// <param name="binding">The binding to add.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
         public override void AddBinding(IBinding binding)
         {
-            Contract.Requires(binding != null);
+            Ensure.ArgumentNotNull(binding, nameof(binding));
 
             this.bindings.Add(binding.Service, binding);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Unregisters the specified binding.
+        /// </summary>
+        /// <param name="binding">The binding to remove.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
         public override void RemoveBinding(IBinding binding)
         {
-            Contract.Requires(binding != null);
+            Ensure.ArgumentNotNull(binding, nameof(binding));
 
             this.bindings.Remove(binding.Service, binding);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Gets the modules that have been loaded into the kernel.
+        /// </summary>
+        /// <returns>A series of loaded modules.</returns>
         public IEnumerable<INinjectModule> GetModules()
         {
             return this.modules.Values.ToArray();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Determines whether a module with the specified name has been loaded in the kernel.
+        /// </summary>
+        /// <param name="name">The name of the module.</param>
+        /// <returns>
+        /// <see langword="true"/> if the specified module has been loaded; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/> or a zero-length <see cref="string"/>.</exception>
         public bool HasModule(string name)
         {
-            Contract.Requires(name != null);
+            Ensure.ArgumentNotNullOrEmpty(name, nameof(name));
+
             return this.modules.ContainsKey(name);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Loads the module(s) into the kernel.
+        /// </summary>
+        /// <param name="modules">The modules to load.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
         public void Load(IEnumerable<INinjectModule> modules)
         {
-            Contract.Requires(this.modules != null);
+            Ensure.ArgumentNotNull(modules, nameof(modules));
 
             modules = modules.ToList();
             foreach (INinjectModule module in modules)
@@ -167,14 +187,12 @@ namespace Ninject
                     throw new NotSupportedException(ExceptionFormatter.ModulesWithNullOrEmptyNamesAreNotSupported());
                 }
 
-                INinjectModule existingModule;
-
-                if (this.modules.TryGetValue(module.Name, out existingModule))
+                if (this.modules.TryGetValue(module.Name, out INinjectModule existingModule))
                 {
                     throw new NotSupportedException(ExceptionFormatter.ModuleWithSameNameIsAlreadyLoaded(module, existingModule));
                 }
 
-                module.OnLoad(this);
+                module.OnLoad(this, this.Settings);
 
                 this.modules.Add(module.Name, module);
             }
@@ -185,64 +203,101 @@ namespace Ninject
             }
         }
 
-#if !NO_ASSEMBLY_SCANNING
-        /// <inheritdoc />
+        /// <summary>
+        /// Loads modules from the files that match the specified pattern(s).
+        /// </summary>
+        /// <param name="filePatterns">The file patterns (i.e. "*.dll", "modules/*.rb") to match.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="filePatterns"/> is <see langword="null"/>.</exception>
         public void Load(IEnumerable<string> filePatterns)
         {
+            Ensure.ArgumentNotNull(filePatterns, nameof(filePatterns));
+
             var moduleLoader = this.Components.Get<IModuleLoader>();
             moduleLoader.LoadModules(filePatterns);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Loads modules defined in the specified assemblies.
+        /// </summary>
+        /// <param name="assemblies">The assemblies to search.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="assemblies"/> is <see langword="null"/>.</exception>
         public void Load(IEnumerable<Assembly> assemblies)
         {
+            Ensure.ArgumentNotNull(assemblies, nameof(assemblies));
+
             this.Load(assemblies.SelectMany(asm => asm.GetNinjectModules()));
         }
-#endif //!NO_ASSEMBLY_SCANNING
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Unloads the plugin with the specified name.
+        /// </summary>
+        /// <param name="name">The plugin's name.</param>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/> or a zero-length <see cref="string"/>.</exception>
         public void Unload(string name)
         {
-            Contract.Requires(name != null);
+            Ensure.ArgumentNotNullOrEmpty(name, nameof(name));
 
-            INinjectModule module;
-
-            if (!this.modules.TryGetValue(name, out module))
+            if (!this.modules.TryGetValue(name, out INinjectModule module))
             {
                 throw new NotSupportedException(ExceptionFormatter.NoModuleLoadedWithTheSpecifiedName(name));
             }
 
-            module.OnUnload(this);
+            module.OnUnload();
 
             this.modules.Remove(name);
         }
 
-        /// <inheritdoc />
-        public IEnumerable<IBinding> GetBindings(Type service)
+        /// <summary>
+        /// Gets the bindings registered for the specified service.
+        /// </summary>
+        /// <param name="service">The service in question.</param>
+        /// <returns>
+        /// A series of bindings that are registered for the service.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        public IBinding[] GetBindings(Type service)
         {
-            Contract.Requires(service != null);
+            Ensure.ArgumentNotNull(service, nameof(service));
+
             var resolvers = this.Components.GetAll<IBindingResolver>();
 
-            return resolvers.SelectMany(resolver => resolver.Resolve(
-                this.bindings.Keys.ToDictionary(type => type, type => this.bindings[type]),
-                service));
+            return resolvers.SelectMany(resolver => resolver.Resolve(new Dictionary<Type, ICollection<IBinding>>(this.bindings, new ReferenceEqualityTypeComparer()), service))
+                            .ToArray();
         }
 
-        /// <inheritdoc />
-        public IReadOnlyKernel BuildReadonlyKernel()
+        /// <summary>
+        /// Creates the readonly kernel.
+        /// </summary>
+        /// <returns>The readonly kernel.</returns>
+        public IReadOnlyKernel BuildReadOnlyKernel()
         {
             var readonlyKernel = new ReadOnlyKernel(
-                this.CloneBindings(),
+                this.Settings,
+                this.bindings.Clone(new ReferenceEqualityTypeComparer()),
                 this.Components.Get<ICache>(),
                 this.Components.Get<IPlanner>(),
+                this.Components.Get<IConstructorScorer>(),
                 this.Components.Get<IPipeline>(),
+                this.Components.Get<IExceptionFormatter>(),
                 this.Components.Get<IBindingPrecedenceComparer>(),
                 this.Components.GetAll<IBindingResolver>().ToList(),
-                this.Components.GetAll<IMissingBindingResolver>().ToList(),
-                this.Settings.Clone(),
-                this.Components.Get<ISelector>());
+                this.Components.GetAll<IMissingBindingResolver>().ToList());
 
             return readonlyKernel;
+        }
+
+        /// <summary>
+        /// Releases resources held by the object.
+        /// </summary>
+        /// <param name="disposing"><see langword="true"/> if called manually, otherwise by GC.</param>
+        public override void Dispose(bool disposing)
+        {
+            if (!this.IsDisposed && disposing)
+            {
+                this.Components.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
 
         /// <summary>
@@ -252,21 +307,30 @@ namespace Ninject
         {
             this.Components.Add<IPlanner, Planner>();
             this.Components.Add<IPlanningStrategy, ConstructorReflectionStrategy>();
-            this.Components.Add<IPlanningStrategy, PropertyReflectionStrategy>();
-            this.Components.Add<IPlanningStrategy, MethodReflectionStrategy>();
+
+            if (this.Settings.PropertyInjection)
+            {
+                this.Components.Add<IPlanningStrategy, PropertyReflectionStrategy>();
+                this.Components.Add<IActivationStrategy, PropertyInjectionStrategy>();
+            }
+
+            if (this.Settings.MethodInjection)
+            {
+                this.Components.Add<IPlanningStrategy, MethodReflectionStrategy>();
+                this.Components.Add<IActivationStrategy, MethodInjectionStrategy>();
+            }
 
             this.Components.Add<ISelector, Selector>();
             this.Components.Add<IConstructorScorer, StandardConstructorScorer>();
             this.Components.Add<IInjectionHeuristic, StandardInjectionHeuristic>();
 
             this.Components.Add<IPipeline, Pipeline>();
+
             if (!this.Settings.ActivationCacheDisabled)
             {
                 this.Components.Add<IActivationStrategy, ActivationCacheStrategy>();
             }
 
-            this.Components.Add<IActivationStrategy, PropertyInjectionStrategy>();
-            this.Components.Add<IActivationStrategy, MethodInjectionStrategy>();
             this.Components.Add<IActivationStrategy, InitializableStrategy>();
             this.Components.Add<IActivationStrategy, StartableStrategy>();
             this.Components.Add<IActivationStrategy, BindingActionStrategy>();
@@ -280,13 +344,11 @@ namespace Ninject
             this.Components.Add<IMissingBindingResolver, DefaultValueBindingResolver>();
             this.Components.Add<IMissingBindingResolver, SelfBindingResolver>();
 
-#if !NO_LCG
             if (!this.Settings.UseReflectionBasedInjection)
             {
-                this.Components.Add<IInjectorFactory, DynamicMethodInjectorFactory>();
+                this.Components.Add<IInjectorFactory, ExpressionInjectorFactory>();
             }
             else
-#endif
             {
                 this.Components.Add<IInjectorFactory, ReflectionInjectorFactory>();
             }
@@ -295,16 +357,9 @@ namespace Ninject
             this.Components.Add<IActivationCache, ActivationCache>();
             this.Components.Add<ICachePruner, GarbageCollectionCachePruner>();
 
-#if !NO_ASSEMBLY_SCANNING
             this.Components.Add<IModuleLoader, ModuleLoader>();
             this.Components.Add<IModuleLoaderPlugin, CompiledModuleLoaderPlugin>();
             this.Components.Add<IAssemblyNameRetriever, AssemblyNameRetriever>();
-#endif
-        }
-
-        private Multimap<Type, IBinding> CloneBindings()
-        {
-            return this.bindings.Clone();
         }
     }
 }

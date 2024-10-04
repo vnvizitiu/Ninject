@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="StandardInjectionHeuristic.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,14 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Selection.Heuristics
 {
     using System.Reflection;
+
     using Ninject.Components;
+    using Ninject.Infrastructure;
     using Ninject.Infrastructure.Language;
 
     /// <summary>
@@ -34,31 +34,49 @@ namespace Ninject.Selection.Heuristics
     public class StandardInjectionHeuristic : NinjectComponent, IInjectionHeuristic
     {
         /// <summary>
-        /// Returns a value indicating whether the specified member should be injected.
+        /// The ninject settings.
         /// </summary>
-        /// <param name="member">The member in question.</param>
-        /// <returns><c>True</c> if the member should be injected; otherwise <c>false</c>.</returns>
-        public virtual bool ShouldInject(MemberInfo member)
+        private readonly INinjectSettings settings;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StandardInjectionHeuristic"/> class.
+        /// </summary>
+        /// <param name="settings">The ninject settings.</param>
+        public StandardInjectionHeuristic(INinjectSettings settings)
         {
-            var propertyInfo = member as PropertyInfo;
+            Ensure.ArgumentNotNull(settings, nameof(settings));
 
-            if (propertyInfo != null)
-            {
-                var injectNonPublic = this.Settings.InjectNonPublic;
+            this.settings = settings;
+        }
 
-                var setMethod = propertyInfo.SetMethod;
-                if (setMethod != null && !injectNonPublic)
-                {
-                    if (!setMethod.IsPublic)
-                    {
-                        setMethod = null;
-                    }
-                }
+        /// <summary>
+        /// Returns a value indicating whether the specified property should be injected.
+        /// </summary>
+        /// <param name="property">The property in question.</param>
+        /// <returns>
+        /// <see langword="true"/> if the property should be injected; otherwise, <see langword="false"/>.
+        /// </returns>
+        public virtual bool ShouldInject(PropertyInfo property)
+        {
+            Ensure.ArgumentNotNull(property, nameof(property));
 
-                return member.HasAttribute(this.Settings.InjectAttribute) && setMethod != null;
-            }
+            var setMethod = property.GetSetMethod(this.settings.InjectNonPublic);
 
-            return member.HasAttribute(this.Settings.InjectAttribute);
+            return setMethod != null && property.HasAttribute(this.settings.InjectAttribute);
+        }
+
+        /// <summary>
+        /// Returns a value indicating whether the specified method should be injected.
+        /// </summary>
+        /// <param name="method">The method in question.</param>
+        /// <returns>
+        /// <see langword="true"/> if the method should be injected; otherwise, <see langword="false"/>.
+        /// </returns>
+        public virtual bool ShouldInject(MethodInfo method)
+        {
+            Ensure.ArgumentNotNull(method, nameof(method));
+
+            return method.HasAttribute(this.settings.InjectAttribute);
         }
     }
 }

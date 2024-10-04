@@ -1,4 +1,3 @@
-#if !NO_MOQ
 namespace Ninject.Tests.Unit
 {
     using System;
@@ -61,11 +60,15 @@ namespace Ninject.Tests.Unit
         [Fact]
         public void DeadObjectsAreRemoved()
         {
-            this.testee.AddActivatedInstance(new TestObject(42));
-            this.testee.AddDeactivatedInstance(new TestObject(42));
+            // Use separate method to allow instances to be finalized
+            AddActivatedAndDeactivatedInstance();
+
             GC.Collect();
+            GC.WaitForPendingFinalizers();
             GC.Collect();
+
             this.testee.Prune();
+
             var activatedObjectCount = this.testee.ActivatedObjectCount;
             var deactivatedObjectCount = this.testee.DeactivatedObjectCount;
 
@@ -84,6 +87,11 @@ namespace Ninject.Tests.Unit
 
             isActivated.Should().BeTrue();
         }
+
+        private void AddActivatedAndDeactivatedInstance()
+        {
+            this.testee.AddActivatedInstance(new TestObject(42));
+            this.testee.AddDeactivatedInstance(new TestObject(42));
+        }
     }
 }
-#endif

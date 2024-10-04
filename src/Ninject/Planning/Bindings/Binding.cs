@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="Binding.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,15 +17,16 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Bindings
 {
     using System;
     using System.Collections.Generic;
+
     using Ninject.Activation;
+    using Ninject.Infrastructure;
     using Ninject.Parameters;
-    using Ninject.Selection;
 
     /// <summary>
     /// Contains information about a service registration.
@@ -38,10 +37,10 @@ namespace Ninject.Planning.Bindings
         /// Initializes a new instance of the <see cref="Binding"/> class.
         /// </summary>
         /// <param name="service">The service that is controlled by the binding.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
         public Binding(Type service)
+            : this(service, new BindingConfiguration())
         {
-            this.Service = service;
-            this.BindingConfiguration = new BindingConfiguration();
         }
 
         /// <summary>
@@ -49,8 +48,13 @@ namespace Ninject.Planning.Bindings
         /// </summary>
         /// <param name="service">The service that is controlled by the binding.</param>
         /// <param name="configuration">The binding configuration.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is <see langword="null"/>.</exception>
         public Binding(Type service, IBindingConfiguration configuration)
         {
+            Ensure.ArgumentNotNull(service, nameof(service));
+            Ensure.ArgumentNotNull(configuration, nameof(configuration));
+
             this.Service = service;
             this.BindingConfiguration = configuration;
         }
@@ -171,7 +175,7 @@ namespace Ninject.Planning.Bindings
         /// <summary>
         /// Gets the parameters defined for the binding.
         /// </summary>
-        public ICollection<IParameter> Parameters
+        public IList<IParameter> Parameters
         {
             get
             {
@@ -202,26 +206,13 @@ namespace Ninject.Planning.Bindings
         }
 
         /// <summary>
-        /// Gets or sets the InitizalizeProviderCallback action
-        /// </summary>
-        public Action<ISelector> InitializeProviderCallback
-        {
-            get
-            {
-                return this.BindingConfiguration.InitializeProviderCallback;
-            }
-
-            set
-            {
-                this.BindingConfiguration.InitializeProviderCallback = value;
-            }
-        }
-
-        /// <summary>
         /// Gets the provider for the binding.
         /// </summary>
         /// <param name="context">The context.</param>
-        /// <returns>The provider to use.</returns>
+        /// <returns>
+        /// The provider to use.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public IProvider GetProvider(IContext context)
         {
             return this.BindingConfiguration.GetProvider(context);
@@ -234,6 +225,7 @@ namespace Ninject.Planning.Bindings
         /// <returns>
         /// The object that will act as the scope, or <see langword="null"/> if the service is transient.
         /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public object GetScope(IContext context)
         {
             return this.BindingConfiguration.GetScope(context);
@@ -245,8 +237,9 @@ namespace Ninject.Planning.Bindings
         /// </summary>
         /// <param name="request">The request.</param>
         /// <returns>
-        ///     <c>True</c> if the request satisfies the condition; otherwise <c>false</c>.
+        /// <see langword="true"/> if the request satisfies the condition; otherwise, <see langword="false"/>.
         /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
         public bool Matches(IRequest request)
         {
             return this.BindingConfiguration.Matches(request);

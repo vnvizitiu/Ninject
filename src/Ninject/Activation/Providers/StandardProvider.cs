@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="StandardProvider.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,21 +17,19 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation.Providers
 {
     using System;
-    using System.Diagnostics.Contracts;
     using System.Linq;
-    using System.Reflection;
-    using Ninject.Infrastructure.Introspection;
-    using Ninject.Infrastructure.Language;
+
+    using Ninject.Components;
+    using Ninject.Infrastructure;
     using Ninject.Parameters;
-    using Ninject.Planning.Bindings;
+    using Ninject.Planning;
     using Ninject.Planning.Directives;
     using Ninject.Planning.Targets;
-    using Ninject.Selection;
     using Ninject.Selection.Heuristics;
 
     /// <summary>
@@ -45,82 +41,54 @@ namespace Ninject.Activation.Providers
         /// Initializes a new instance of the <see cref="StandardProvider"/> class.
         /// </summary>
         /// <param name="type">The type (or prototype) of instances the provider creates.</param>
+        /// <param name="planner">The planner component.</param>
         /// <param name="constructorScorer">The constructor scorer component.</param>
-        public StandardProvider(Type type, IConstructorScorer constructorScorer)
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="planner"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="constructorScorer"/> is <see langword="null"/>.</exception>
+        public StandardProvider(Type type, IPlanner planner, IConstructorScorer constructorScorer)
         {
-            Contract.Requires(type != null);
-            Contract.Requires(constructorScorer != null);
+            Ensure.ArgumentNotNull(type, nameof(type));
+            Ensure.ArgumentNotNull(planner, nameof(planner));
+            Ensure.ArgumentNotNull(constructorScorer, nameof(constructorScorer));
 
             this.Type = type;
+            this.Planner = planner;
             this.ConstructorScorer = constructorScorer;
         }
 
         /// <summary>
         /// Gets the type (or prototype) of instances the provider creates.
         /// </summary>
-        public Type Type { get; private set; }
+        public Type Type { get; }
 
         /// <summary>
-        /// Gets the selector component.
+        /// Gets the planner component.
         /// </summary>
-        public IConstructorScorer ConstructorScorer { get; private set; }
+        public IPlanner Planner { get; }
 
         /// <summary>
-        /// Gets a callback that creates an instance of the <see cref="StandardProvider"/>
-        /// for the specified type.
+        /// Gets the constructor scorer component.
         /// </summary>
-        /// <param name="prototype">The prototype the provider instance will create.</param>
-        /// <param name="selector">The selector.</param>
-        /// <returns>The created callback.</returns>
-        public static Func<IContext, IProvider> GetCreationCallback(Type prototype, ISelector selector)
-        {
-            var provider = new StandardProvider(prototype, selector.ConstructorScorer);
-            return ctx => provider;
-        }
-
-        /// <summary>
-        /// Gets a callback that creates an instance of the <see cref="StandardProvider"/>
-        /// for the specified type and constructor.
-        /// </summary>
-        /// <param name="prototype">The prototype the provider instance will create.</param>
-        /// <param name="constructor">The constructor.</param>
-        /// <returns>The created callback.</returns>
-        public static Func<IContext, IProvider> GetCreationCallback(Type prototype, ConstructorInfo constructor)
-        {
-            var provider = new StandardProvider(prototype, new SpecificConstructorSelector(constructor));
-            return ctx => provider;
-        }
-
-        /// <summary>
-        /// Assigns the provider callback to the building configuration.
-        /// </summary>
-        /// <param name="bindingConfiguration">
-        /// The building configuration.
-        /// </param>
-        /// <param name="prototype">
-        /// The prototype.
-        /// </param>
-        public static void AssignProviderCallback(IBindingConfiguration bindingConfiguration, Type prototype)
-        {
-            var provider = new StandardProvider(prototype, null);
-            bindingConfiguration.ProviderCallback = ctx => provider;
-            bindingConfiguration.InitializeProviderCallback =
-                selector => provider.ConstructorScorer = selector.ConstructorScorer;
-        }
+        public IConstructorScorer ConstructorScorer { get; }
 
         /// <summary>
         /// Creates an instance within the specified context.
         /// </summary>
         /// <param name="context">The context.</param>
         /// <returns>The created instance.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public virtual object Create(IContext context)
         {
-            context.BuildPlan(this.GetImplementationType(context.Request.Service));
+            Ensure.ArgumentNotNull(context, nameof(context));
+
+            if (context.Plan == null)
+            {
+                context.Plan = this.Planner.GetPlan(this.GetImplementationType(context.Request.Service));
+            }
 
             var directive = this.DetermineConstructorInjectionDirective(context);
-
-            var arguments = directive.Targets.Select(target => this.GetValue(context, target)).ToArray();
-
+            var arguments = GetValues(context, directive.Targets);
             return directive.Injector(arguments);
         }
 
@@ -130,12 +98,14 @@ namespace Ninject.Activation.Providers
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
         /// <returns>The value to inject into the specified target.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
         public object GetValue(IContext context, ITarget target)
         {
-            var parameter = context
-                .Parameters.OfType<IConstructorArgument>()
-                .SingleOrDefault(p => p.AppliesToTarget(context, target));
-            return parameter != null ? parameter.GetValue(context, target) : target.ResolveWithin(context);
+            Ensure.ArgumentNotNull(context, nameof(context));
+            Ensure.ArgumentNotNull(target, nameof(target));
+
+            return GetValueCore(context, target);
         }
 
         /// <summary>
@@ -144,33 +114,83 @@ namespace Ninject.Activation.Providers
         /// </summary>
         /// <param name="service">The service in question.</param>
         /// <returns>The implementation type that will be activated.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
         public Type GetImplementationType(Type service)
         {
-            return this.Type.GetTypeInfo().ContainsGenericParameters ?
-                this.Type.MakeGenericType(service.GetTypeInfo().GenericTypeArguments) :
-                this.Type;
+            Ensure.ArgumentNotNull(service, nameof(service));
+
+            return this.Type.ContainsGenericParameters ? this.Type.MakeGenericType(service.GetGenericArguments()) : this.Type;
+        }
+
+        private static object GetValueCore(IContext context, ITarget target)
+        {
+            IConstructorArgument constructorArgument = null;
+
+            foreach (var parameter in context.Parameters)
+            {
+                if (parameter is IConstructorArgument ctorArg && ctorArg.AppliesToTarget(context, target))
+                {
+                    if (constructorArgument != null)
+                    {
+                        throw new InvalidOperationException("Sequence contains more than one matching element");
+                    }
+
+                    constructorArgument = ctorArg;
+                }
+            }
+
+            if (constructorArgument != null)
+            {
+                return constructorArgument.GetValue(context, target);
+            }
+
+            return target.ResolveWithin(context);
+        }
+
+        private static object[] GetValues(IContext context, ITarget[] targets)
+        {
+            if (targets.Length == 0)
+            {
+                return Array.Empty<object>();
+            }
+
+            object[] values = new object[targets.Length];
+
+            for (var i = 0; i < targets.Length; i++)
+            {
+                values[i] = GetValueCore(context, targets[i]);
+            }
+
+            return values;
         }
 
         private ConstructorInjectionDirective DetermineConstructorInjectionDirective(IContext context)
         {
-            var directives = context.Plan.ConstructorInjectionDirectives;
-            if (directives.Count == 1)
+            var directives = context.Plan.GetAll<ConstructorInjectionDirective>().ToArray();
+
+            if (directives.Length == 0)
+            {
+                throw new ActivationException(ExceptionFormatter.NoConstructorsAvailable(context));
+            }
+
+            if (directives.Length == 1)
             {
                 return directives[0];
             }
 
             var bestDirectives =
                 directives
-                    .GroupBy(option => this.ConstructorScorer.Score(context, option))
+                    .GroupBy(directive => this.ConstructorScorer.Score(context, directive))
                     .OrderByDescending(g => g.Key)
-                    .FirstOrDefault();
-            if (bestDirectives == null)
+                    .First()
+                    .ToArray();
+
+            if (bestDirectives.Length > 1)
             {
-                throw new ActivationException(ExceptionFormatter.NoConstructorsAvailable(context));
+                throw new ActivationException(ExceptionFormatter.ConstructorsAmbiguous(context, bestDirectives));
             }
 
-            return bestDirectives.SingleOrThrowException(
-                () => new ActivationException(ExceptionFormatter.ConstructorsAmbiguous(context, bestDirectives)));
+            return bestDirectives[0];
         }
     }
 }

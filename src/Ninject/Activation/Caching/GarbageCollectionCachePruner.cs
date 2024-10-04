@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="GarbageCollectionCachePruner.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,15 +17,16 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation.Caching
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Threading;
+
     using Ninject.Components;
+    using Ninject.Infrastructure;
     using Ninject.Infrastructure.Language;
 
     /// <summary>
@@ -36,6 +35,11 @@ namespace Ninject.Activation.Caching
     /// </summary>
     public class GarbageCollectionCachePruner : NinjectComponent, ICachePruner
     {
+        /// <summary>
+        /// The ninject settings.
+        /// </summary>
+        private readonly INinjectSettings settings;
+
         /// <summary>
         /// indicator for if GC has been run.
         /// </summary>
@@ -57,9 +61,21 @@ namespace Ninject.Activation.Caching
         private bool stop;
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="GarbageCollectionCachePruner"/> class.
+        /// </summary>
+        /// <param name="settings">The ninject settings.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="settings"/> is <see langword="null"/>.</exception>
+        public GarbageCollectionCachePruner(INinjectSettings settings)
+        {
+            Ensure.ArgumentNotNull(settings, nameof(settings));
+
+            this.settings = settings;
+        }
+
+        /// <summary>
         /// Releases resources held by the object.
         /// </summary>
-        /// <param name="disposing"><c>True</c> if called manually, otherwise by GC.</param>
+        /// <param name="disposing"><see langword="true"/> if called manually, otherwise by GC.</param>
         public override void Dispose(bool disposing)
         {
             if (disposing && !this.IsDisposed && this.timer != null)
@@ -74,12 +90,15 @@ namespace Ninject.Activation.Caching
         /// Starts pruning the specified pruneable based on the rules of the pruner.
         /// </summary>
         /// <param name="pruneable">The pruneable that will be pruned.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="pruneable"/> is <see langword="null"/>.</exception>
         public void Start(IPruneable pruneable)
         {
+            Ensure.ArgumentNotNull(pruneable, nameof(pruneable));
+
             this.caches.Add(pruneable);
             if (this.timer == null)
             {
-                this.timer = new Timer(this.PruneCacheIfGarbageCollectorHasRun, null, this.GetTimeoutInMilliseconds(), Timeout.Infinite);
+                this.timer = new Timer((state) => this.PruneCacheIfGarbageCollectorHasRun(state), null, this.GetTimeoutInMilliseconds(), Timeout.Infinite);
             }
         }
 
@@ -93,9 +112,13 @@ namespace Ninject.Activation.Caching
                 this.stop = true;
             }
 
-            this.timer.Dispose();
-            this.timer = null;
-            this.caches.Clear();
+            using (var signal = new ManualResetEvent(false))
+            {
+                this.timer.Dispose(signal);
+                signal.WaitOne();
+                this.timer = null;
+                this.caches.Clear();
+            }
         }
 
         private void PruneCacheIfGarbageCollectorHasRun(object state)
@@ -114,7 +137,7 @@ namespace Ninject.Activation.Caching
                         return;
                     }
 
-                    this.caches.Map(cache => cache.Prune());
+                    this.caches.ForEach(cache => cache.Prune());
                     this.indicator.Target = new object();
                 }
                 finally
@@ -126,7 +149,7 @@ namespace Ninject.Activation.Caching
 
         private int GetTimeoutInMilliseconds()
         {
-            var interval = this.Settings.CachePruningInterval;
+            var interval = this.settings.CachePruningInterval;
             return interval == TimeSpan.MaxValue ? -1 : (int)interval.TotalMilliseconds;
         }
     }

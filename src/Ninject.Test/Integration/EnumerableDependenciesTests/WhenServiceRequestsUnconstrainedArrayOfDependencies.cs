@@ -40,5 +40,23 @@
             parent.Should().NotBeNull();
             parent.Children.Count.Should().Be(0);
         }
+
+        [Fact]
+        public void ArrayIsResolvedIfElementTypeIsExplicitlyBinded()
+        {
+            this.Kernel.Bind<IChild>().To<ChildA>();
+
+            var children = this.Kernel.Get<IChild[]>();
+
+            children.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void EmptyArrayIsResolvedIfElementTypeIsMissingBinding()
+        {
+            var children = this.Kernel.Get<IChild[]>();
+
+            children.Should().BeEmpty();
+        }
     }
 }

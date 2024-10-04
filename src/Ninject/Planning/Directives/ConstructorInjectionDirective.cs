@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="ConstructorInjectionDirective.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,10 +17,13 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Directives
 {
+    using System;
     using System.Reflection;
+
     using Ninject.Injection;
 
     /// <summary>
@@ -35,6 +36,8 @@ namespace Ninject.Planning.Directives
         /// </summary>
         /// <param name="constructor">The constructor described by the directive.</param>
         /// <param name="injector">The injector that will be triggered.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="constructor"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="injector"/> is <see langword="null"/>.</exception>
         public ConstructorInjectionDirective(ConstructorInfo constructor, ConstructorInjector injector)
             : base(constructor, injector)
         {
@@ -42,14 +45,8 @@ namespace Ninject.Planning.Directives
         }
 
         /// <summary>
-        /// Gets or sets the base .ctor definition.
+        /// Gets the base .ctor definition.
         /// </summary>
-        public ConstructorInfo Constructor { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether this constructor has an inject attribute.
-        /// </summary>
-        /// <value><c>true</c> if this constructor has an inject attribute; otherwise, <c>false</c>.</value>
-        public bool HasInjectAttribute { get; set; }
+        public ConstructorInfo Constructor { get; private set; }
     }
 }

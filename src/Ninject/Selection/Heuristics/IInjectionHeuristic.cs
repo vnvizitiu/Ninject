@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="IInjectionHeuristic.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,11 +17,12 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Selection.Heuristics
 {
     using System.Reflection;
+
     using Ninject.Components;
 
     /// <summary>
@@ -32,10 +31,21 @@ namespace Ninject.Selection.Heuristics
     public interface IInjectionHeuristic : INinjectComponent
     {
         /// <summary>
-        /// Returns a value indicating whether the specified member should be injected.
+        /// Returns a value indicating whether the specified property should be injected.
         /// </summary>
-        /// <param name="member">The member in question.</param>
-        /// <returns><c>True</c> if the member should be injected; otherwise <c>false</c>.</returns>
-        bool ShouldInject(MemberInfo member);
+        /// <param name="property">The property in question.</param>
+        /// <returns>
+        /// <see langword="true"/> if the property should be injected; otherwise, <see langword="false"/>.
+        /// </returns>
+        bool ShouldInject(PropertyInfo property);
+
+        /// <summary>
+        /// Returns a value indicating whether the specified method should be injected.
+        /// </summary>
+        /// <param name="method">The method in question.</param>
+        /// <returns>
+        /// <see langword="true"/> if the method should be injected; otherwise, <see langword="false"/>.
+        /// </returns>
+        bool ShouldInject(MethodInfo method);
     }
 }

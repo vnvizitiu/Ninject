@@ -1,5 +1,4 @@
-﻿#if !WINRT
-namespace Ninject.Tests.Integration.ThreadScopeTests
+﻿namespace Ninject.Tests.Integration.ThreadScopeTests
 {
     using System;
     using System.Threading;
@@ -29,15 +28,15 @@ namespace Ninject.Tests.Integration.ThreadScopeTests
         [Fact]
         public void FirstActivatedInstanceIsReusedWithinThread()
         {
-            kernel.Bind<IWeapon>().To<Sword>().InThreadScope();
+            this.kernel.Bind<IWeapon>().To<Sword>().InThreadScope();
 
             IWeapon weapon1 = null;
             IWeapon weapon2 = null;
 
             ThreadStart callback = () =>
             {
-                weapon1 = kernel.Get<IWeapon>();
-                weapon2 = kernel.Get<IWeapon>();
+                weapon1 = this.kernel.Get<IWeapon>();
+                weapon2 = this.kernel.Get<IWeapon>();
             };
 
             var thread = new Thread(callback);
@@ -53,12 +52,12 @@ namespace Ninject.Tests.Integration.ThreadScopeTests
         [Fact]
         public void ScopeDoesNotInterfereWithExternalRequests()
         {
-            kernel.Bind<IWeapon>().To<Sword>().InThreadScope();
+            this.kernel.Bind<IWeapon>().To<Sword>().InThreadScope();
 
-            IWeapon weapon1 = kernel.Get<IWeapon>();
+            IWeapon weapon1 = this.kernel.Get<IWeapon>();
             IWeapon weapon2 = null;
 
-            ThreadStart callback = () => weapon2 = kernel.Get<IWeapon>();
+            ThreadStart callback = () => weapon2 = this.kernel.Get<IWeapon>();
 
             var thread = new Thread(callback);
 
@@ -70,33 +69,37 @@ namespace Ninject.Tests.Integration.ThreadScopeTests
             weapon1.Should().NotBeSameAs(weapon2);
         }
 
-#if !MONO
         [Fact]
         public void InstancesActivatedWithinScopeAreDeactivatedAfterThreadIsGarbageCollectedAndCacheIsPruned()
         {
-            kernel.Bind<NotifiesWhenDisposed>().ToSelf().InThreadScope();
-            var cache = kernel.Components.Get<ICache>();
+            this.kernel.Bind<NotifiesWhenDisposed>().ToSelf().InThreadScope();
+            var cache = this.kernel.Components.Get<ICache>();
 
-            NotifiesWhenDisposed instance = null;
-
-            ThreadStart callback = () => instance = kernel.Get<NotifiesWhenDisposed>();
-
-            var thread = new Thread(callback);
-
-            thread.Start();
-            thread.Join();
-
-            thread = null;
+            // Use separate method to allow thread/scope to be finalized
+            NotifiesWhenDisposed instance = GetInstanceFromSeparateThread();
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
+            GC.Collect();
 
             cache.Prune();
 
             instance.Should().NotBeNull();
             instance.IsDisposed.Should().BeTrue();
         }
-#endif
+
+        private NotifiesWhenDisposed GetInstanceFromSeparateThread()
+        {
+            NotifiesWhenDisposed instance = null;
+
+            ThreadStart callback = () => instance = this.kernel.Get<NotifiesWhenDisposed>();
+
+            var thread = new Thread(callback);
+
+            thread.Start();
+            thread.Join();
+
+            return instance;
+        }
     }
 }
-#endif

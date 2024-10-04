@@ -2,6 +2,7 @@
 {
     using FluentAssertions;
     using Ninject.Tests.Integration.EnumerableDependenciesTests.Fakes;
+    using System.Collections.Generic;
     using Xunit;
 
     public class WhenServiceRequestsUnconstrainedListOfDependencies : UnconstrainedDependenciesContext
@@ -31,14 +32,32 @@
         }
 
         [Fact]
-        public void EmptyListIsInjectedWhenNoBindingIsAvailable()
+        public void ServiceIsInjectedWithEmptyListIfElementTypeIsMissingBinding()
         {
             this.Kernel.Bind<IParent>().To<RequestsList>();
 
             var parent = this.Kernel.Get<IParent>();
 
             parent.Should().NotBeNull();
-            parent.Children.Count.Should().Be(0);
+            parent.Children.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void ListIsResolvedIfElementTypeIsExplicitlyBinded()
+        {
+            this.Kernel.Bind<IChild>().To<ChildA>();
+
+            var children = this.Kernel.Get<List<IChild>>();
+
+            children.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void EmptyListIsResolvedIfElementTypeIsMissingBinding()
+        {
+            var children = this.Kernel.Get<List<IChild>>();
+
+            children.Should().BeEmpty();
         }
     }
 }

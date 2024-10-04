@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="Plan.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,13 +17,15 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning
 {
     using System;
     using System.Collections.Generic;
     using System.Linq;
+
+    using Ninject.Infrastructure;
     using Ninject.Planning.Directives;
 
     /// <summary>
@@ -33,15 +33,19 @@ namespace Ninject.Planning
     /// </summary>
     public class Plan : IPlan
     {
+        private readonly List<IDirective> directives;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Plan"/> class.
         /// </summary>
         /// <param name="type">The type the plan describes.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
         public Plan(Type type)
         {
+            Ensure.ArgumentNotNull(type, nameof(type));
+
             this.Type = type;
-            this.Directives = new List<IDirective>();
-            this.ConstructorInjectionDirectives = new List<ConstructorInjectionDirective>();
+            this.directives = new List<IDirective>();
         }
 
         /// <summary>
@@ -52,35 +56,30 @@ namespace Ninject.Planning
         /// <summary>
         /// Gets the directives defined in the plan.
         /// </summary>
-        public ICollection<IDirective> Directives { get; private set; }
-
-        /// <summary>
-        /// Gets the constructor injection directives defined in the plan.
-        /// </summary>
-        public IList<ConstructorInjectionDirective> ConstructorInjectionDirectives { get; private set; }
+        public ICollection<IDirective> Directives
+        {
+            get { return this.directives; }
+        }
 
         /// <summary>
         /// Adds the specified directive to the plan.
         /// </summary>
         /// <param name="directive">The directive.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="directive"/> is <see langword="null"/>.</exception>
         public void Add(IDirective directive)
         {
-            var constructorInjectionDirective = directive as ConstructorInjectionDirective;
-            if (constructorInjectionDirective != null)
-            {
-                this.ConstructorInjectionDirectives.Add(constructorInjectionDirective);
-            }
-            else
-            {
-                this.Directives.Add(directive);
-            }
+            Ensure.ArgumentNotNull(directive, nameof(directive));
+
+            this.directives.Add(directive);
         }
 
         /// <summary>
         /// Determines whether the plan contains one or more directives of the specified type.
         /// </summary>
         /// <typeparam name="TDirective">The type of directive.</typeparam>
-        /// <returns><c>True</c> if the plan has one or more directives of the type; otherwise, <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if the plan has one or more directives of the type; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Has<TDirective>()
             where TDirective : IDirective
         {
@@ -91,7 +90,9 @@ namespace Ninject.Planning
         /// Gets the first directive of the specified type from the plan.
         /// </summary>
         /// <typeparam name="TDirective">The type of directive.</typeparam>
-        /// <returns>The first directive, or <see langword="null"/> if no matching directives exist.</returns>
+        /// <returns>
+        /// The first directive, or <see langword="null"/> if no matching directives exist.
+        /// </returns>
         public TDirective GetOne<TDirective>()
             where TDirective : IDirective
         {
@@ -102,11 +103,20 @@ namespace Ninject.Planning
         /// Gets all directives of the specified type that exist in the plan.
         /// </summary>
         /// <typeparam name="TDirective">The type of directive.</typeparam>
-        /// <returns>A series of directives of the specified type.</returns>
+        /// <returns>
+        /// A series of directives of the specified type.
+        /// </returns>
         public IEnumerable<TDirective> GetAll<TDirective>()
             where TDirective : IDirective
         {
-            return this.Directives.OfType<TDirective>();
+            var directiveCount = this.directives.Count;
+            for (var i = 0; i < directiveCount; i++)
+            {
+                if (this.directives[i] is TDirective tdir)
+                {
+                    yield return tdir;
+                }
+            }
         }
     }
 }

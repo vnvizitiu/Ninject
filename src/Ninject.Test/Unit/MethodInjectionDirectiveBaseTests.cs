@@ -21,15 +21,12 @@ namespace Ninject.Tests.Unit.MethodInjectionDirectiveBaseTests
         [Fact]
         public void CreatesTargetsForMethodParameters()
         {
-#if !WINRT
             var method = typeof(Dummy).GetMethod("MethodA");
-#else
-            var method = typeof(Dummy).GetRuntimeMethods().First(m => m.Name == "MethodA");
-#endif
+
             MethodInjector injector = delegate { };
 
-            directive = new FakeMethodInjectionDirective(method, injector);
-            ITarget[] targets = directive.Targets;
+            this.directive = new FakeMethodInjectionDirective(method, injector);
+            ITarget[] targets = this.directive.Targets;
 
             targets.Length.Should().Be(3);
             targets[0].Name.Should().Be("foo");

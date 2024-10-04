@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="TypeMatchingConstructorArgument.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,14 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Parameters
 {
     using System;
+
     using Ninject.Activation;
+    using Ninject.Infrastructure;
     using Ninject.Planning.Targets;
 
     /// <summary>
@@ -50,8 +50,13 @@ namespace Ninject.Parameters
         /// <param name="type">The type of the argument to override.</param>
         /// <param name="valueCallback">The callback that will be triggered to get the parameter's value.</param>
         /// <param name="shouldInherit">Whether the parameter should be inherited into child requests.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="valueCallback"/> is <see langword="null"/>.</exception>
         public TypeMatchingConstructorArgument(Type type, Func<IContext, ITarget, object> valueCallback, bool shouldInherit)
         {
+            Ensure.ArgumentNotNull(type, nameof(type));
+            Ensure.ArgumentNotNull(valueCallback, nameof(valueCallback));
+
             this.ValueCallback = valueCallback;
             this.ShouldInherit = shouldInherit;
             this.type = type;
@@ -84,10 +89,11 @@ namespace Ninject.Parameters
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
         /// <returns>
-        /// True if the parameter applies in the specified context to the specified target.
+        /// <see langword="true"/> if the parameter applies in the specified context to the specified target;
+        /// otherwise, <see langword="false"/>.
         /// </returns>
         /// <remarks>
-        /// Only one parameter may return true.
+        /// Only one parameter may return <see langword="true"/>.
         /// </remarks>
         public bool AppliesToTarget(IContext context, ITarget target)
         {
@@ -99,9 +105,14 @@ namespace Ninject.Parameters
         /// </summary>
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
-        /// <returns>The value for the parameter.</returns>
+        /// <returns>
+        /// The value for the parameter.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public object GetValue(IContext context, ITarget target)
         {
+            Ensure.ArgumentNotNull(context, nameof(context));
+
             return this.ValueCallback(context, target);
         }
 
@@ -109,28 +120,32 @@ namespace Ninject.Parameters
         /// Indicates whether the current object is equal to another object of the same type.
         /// </summary>
         /// <param name="other">An object to compare with this object.</param>
-        /// <returns><c>True</c> if the objects are equal; otherwise <c>false</c></returns>
+        /// <returns>
+        /// <see langword="true"/> if the objects are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Equals(IParameter other)
         {
-            var argument = other as TypeMatchingConstructorArgument;
-            return argument != null && argument.type == this.type;
+            return other is TypeMatchingConstructorArgument argument && argument.type == this.type;
         }
 
         /// <summary>
         /// Determines whether the object equals the specified object.
         /// </summary>
         /// <param name="obj">An object to compare with this object.</param>
-        /// <returns><c>True</c> if the objects are equal; otherwise <c>false</c></returns>
+        /// <returns>
+        /// <see langword="true"/> if the objects are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public override bool Equals(object obj)
         {
-            var parameter = obj as IParameter;
-            return parameter != null ? this.Equals(parameter) : ReferenceEquals(this, obj);
+            return obj is IParameter parameter ? this.Equals(parameter) : ReferenceEquals(this, obj);
         }
 
         /// <summary>
         /// Serves as a hash function for a particular type.
         /// </summary>
-        /// <returns>A hash code for the object.</returns>
+        /// <returns>
+        /// A hash code for the object.
+        /// </returns>
         public override int GetHashCode()
         {
             return this.GetType().GetHashCode() ^ this.type.GetHashCode();

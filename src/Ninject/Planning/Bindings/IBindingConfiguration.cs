@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="IBindingConfiguration.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,15 +17,15 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Bindings
 {
     using System;
     using System.Collections.Generic;
+
     using Ninject.Activation;
     using Ninject.Parameters;
-    using Ninject.Selection;
 
     /// <summary>
     /// The configuration of a binding.
@@ -72,7 +70,7 @@ namespace Ninject.Planning.Bindings
         /// <summary>
         /// Gets the parameters defined for the binding.
         /// </summary>
-        ICollection<IParameter> Parameters { get; }
+        IList<IParameter> Parameters { get; }
 
         /// <summary>
         /// Gets the actions that should be called after instances are activated via the binding.
@@ -85,22 +83,21 @@ namespace Ninject.Planning.Bindings
         ICollection<Action<IContext, object>> DeactivationActions { get; }
 
         /// <summary>
-        /// Gets or sets the InitizalizeProviderCallback action
-        /// </summary>
-        Action<ISelector> InitializeProviderCallback { get; set; }
-
-        /// <summary>
         /// Gets the provider for the binding.
         /// </summary>
         /// <param name="context">The context.</param>
         /// <returns>The provider to use.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         IProvider GetProvider(IContext context);
 
         /// <summary>
         /// Gets the scope for the binding, if any.
         /// </summary>
         /// <param name="context">The context.</param>
-        /// <returns>The object that will act as the scope, or <see langword="null"/> if the service is transient.</returns>
+        /// <returns>
+        /// The object that will act as the scope, or <see langword="null"/> if the service is transient.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         object GetScope(IContext context);
 
         /// <summary>
@@ -108,7 +105,10 @@ namespace Ninject.Planning.Bindings
         /// if one was defined.
         /// </summary>
         /// <param name="request">The request.</param>
-        /// <returns><c>True</c> if the request satisfies the condition; otherwise <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if the request satisfies the conditions; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
         bool Matches(IRequest request);
     }
 }

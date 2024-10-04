@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="FormatExtensions.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,38 +17,24 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Infrastructure.Introspection
 {
     using System;
-    using System.Globalization;
     using System.IO;
     using System.Reflection;
     using System.Text;
+
     using Ninject.Activation;
-    using Ninject.Infrastructure.Language;
     using Ninject.Planning.Bindings;
     using Ninject.Planning.Targets;
 
     /// <summary>
-    /// Provides extension methods for string formatting
+    /// Provides extension methods for string formatting.
     /// </summary>
     public static class FormatExtensions
     {
-#if NO_MEMBERTYPE
-        private enum MemberTypes
-        {
-            Field,
-            Event,
-            Constructor,
-            Property,
-            Method,
-            NestedType,
-            TypeInfo
-        }
-#endif
-
         /// <summary>
         /// Formats the activation path into a meaningful string representation.
         /// </summary>
@@ -77,7 +61,7 @@ namespace Ninject.Infrastructure.Introspection
         /// </summary>
         /// <param name="binding">The binding to be formatted.</param>
         /// <param name="context">The context.</param>
-        /// <returns>The binding formatted as string</returns>
+        /// <returns>The binding formatted as string.</returns>
         public static string Format(this IBinding binding, IContext context)
         {
             using (var sw = new StringWriter())
@@ -159,11 +143,7 @@ namespace Ninject.Infrastructure.Introspection
         {
             using (var sw = new StringWriter())
             {
-#if !NO_MEMBERTYPE
                 switch (target.Member.MemberType)
-#else
-                switch (target.Member.GetMemberType())
-#endif
                 {
                     case MemberTypes.Constructor:
                         sw.Write("parameter {0} of constructor", target.Name);
@@ -181,9 +161,8 @@ namespace Ninject.Infrastructure.Introspection
                         throw new ArgumentOutOfRangeException();
                 }
 
-#if !CORE
                 sw.Write(" of type {0}", target.Member.ReflectedType.Format());
-#endif
+
                 return sw.ToString();
             }
         }
@@ -197,17 +176,10 @@ namespace Ninject.Infrastructure.Introspection
         {
             var friendlyName = GetFriendlyName(type);
 
-#if !MONO
             if (friendlyName.Contains("AnonymousType"))
             {
                 return "AnonymousType";
             }
-#else
-            if (friendlyName.Contains("__AnonType"))
-            {
-                return "AnonymousType";
-            }
-#endif
 
             switch (friendlyName.ToLowerInvariant())
             {
@@ -311,37 +283,5 @@ namespace Ninject.Infrastructure.Introspection
 
             sb.Append("}");
         }
-
-#if NO_MEMBERTYPE
-        private static MemberTypes GetMemberType(this MemberInfo member)
-        {
-            if (member is FieldInfo)
-            {
-                return MemberTypes.Field;
-            }
-
-            if (member is ConstructorInfo)
-            {
-                return MemberTypes.Constructor;
-            }
-
-            if (member is PropertyInfo)
-            {
-                return MemberTypes.Property;
-            }
-
-            if (member is EventInfo)
-            {
-                return MemberTypes.Event;
-            }
-
-            if (member is MethodInfo)
-            {
-                return MemberTypes.Method;
-            }
-
-            return MemberTypes.TypeInfo;
-        }
-#endif
     }
 }

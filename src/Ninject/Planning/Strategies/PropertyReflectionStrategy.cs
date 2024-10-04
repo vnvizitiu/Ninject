@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="PropertyReflectionStrategy.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,15 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Strategies
 {
+    using System;
     using System.Reflection;
+
     using Ninject.Components;
+    using Ninject.Infrastructure;
     using Ninject.Injection;
     using Ninject.Planning.Directives;
     using Ninject.Selection;
@@ -39,8 +40,13 @@ namespace Ninject.Planning.Strategies
         /// </summary>
         /// <param name="selector">The selector component.</param>
         /// <param name="injectorFactory">The injector factory component.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="selector"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="injectorFactory"/> is <see langword="null"/>.</exception>
         public PropertyReflectionStrategy(ISelector selector, IInjectorFactory injectorFactory)
         {
+            Ensure.ArgumentNotNull(selector, nameof(selector));
+            Ensure.ArgumentNotNull(injectorFactory, nameof(injectorFactory));
+
             this.Selector = selector;
             this.InjectorFactory = injectorFactory;
         }
@@ -51,17 +57,20 @@ namespace Ninject.Planning.Strategies
         public ISelector Selector { get; private set; }
 
         /// <summary>
-        /// Gets the injector factory component.
+        /// Gets or sets the injector factory component.
         /// </summary>
-        public IInjectorFactory InjectorFactory { get; private set; }
+        public IInjectorFactory InjectorFactory { get; set; }
 
         /// <summary>
         /// Adds a <see cref="PropertyInjectionDirective"/> to the plan for each property
         /// that should be injected.
         /// </summary>
         /// <param name="plan">The plan that is being generated.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <see langword="null"/>.</exception>
         public void Execute(IPlan plan)
         {
+            Ensure.ArgumentNotNull(plan, nameof(plan));
+
             foreach (PropertyInfo property in this.Selector.SelectPropertiesForInjection(plan.Type))
             {
                 plan.Add(new PropertyInjectionDirective(property, this.InjectorFactory.Create(property)));

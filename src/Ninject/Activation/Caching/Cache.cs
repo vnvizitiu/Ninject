@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="Cache.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,13 +17,15 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation.Caching
 {
+    using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
+
     using Ninject.Components;
     using Ninject.Infrastructure;
     using Ninject.Infrastructure.Disposal;
@@ -40,18 +40,20 @@ namespace Ninject.Activation.Caching
         /// Contains all cached instances.
         /// This is a dictionary of scopes to a multimap for bindings to cache entries.
         /// </summary>
-        private readonly IDictionary<object, Multimap<IBindingConfiguration, CacheEntry>> entries =
-            new Dictionary<object, Multimap<IBindingConfiguration, CacheEntry>>(new WeakReferenceEqualityComparer());
+        private readonly ConcurrentDictionary<object, ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>>> entries =
+           new ConcurrentDictionary<object, ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>>>(new WeakReferenceEqualityComparer());
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Cache"/> class.
         /// </summary>
         /// <param name="pipeline">The pipeline component.</param>
         /// <param name="cachePruner">The cache pruner component.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="cachePruner"/> is <see langword="null"/>.</exception>
         public Cache(IPipeline pipeline, ICachePruner cachePruner)
         {
-            Contract.Requires(pipeline != null);
-            Contract.Requires(cachePruner != null);
+            Ensure.ArgumentNotNull(pipeline, nameof(pipeline));
+            Ensure.ArgumentNotNull(cachePruner, nameof(cachePruner));
 
             this.Pipeline = pipeline;
             cachePruner.Start(this);
@@ -67,13 +69,13 @@ namespace Ninject.Activation.Caching
         /// </summary>
         public int Count
         {
-            get { return this.GetAllCacheEntries().Count(); }
+            get { return this.GetAllCacheEntries().Count; }
         }
 
         /// <summary>
         /// Releases resources held by the object.
         /// </summary>
-        /// <param name="disposing"><c>True</c> if called manually, otherwise by GC.</param>
+        /// <param name="disposing"><see langword="true"/> if called manually, otherwise by GC.</param>
         public override void Dispose(bool disposing)
         {
             if (disposing && !this.IsDisposed)
@@ -89,25 +91,72 @@ namespace Ninject.Activation.Caching
         /// </summary>
         /// <param name="context">The context to store.</param>
         /// <param name="reference">The instance reference.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public void Remember(IContext context, InstanceReference reference)
         {
+            Ensure.ArgumentNotNull(context, nameof(context));
+
             var scope = context.GetScope();
             var entry = new CacheEntry(context, reference);
 
-            lock (this.entries)
-            {
-                var weakScopeReference = new ReferenceEqualWeakReference(scope);
-                if (!this.entries.ContainsKey(weakScopeReference))
-                {
-                    this.entries[weakScopeReference] = new Multimap<IBindingConfiguration, CacheEntry>();
-                    var notifyScope = scope as INotifyWhenDisposed;
-                    if (notifyScope != null)
-                    {
-                        notifyScope.Disposed += (o, e) => this.Clear(weakScopeReference);
-                    }
-                }
+            var weakScopeReference = new ReferenceEqualWeakReference(scope);
 
-                this.entries[weakScopeReference].Add(context.Binding.BindingConfiguration, entry);
+            var scopedEntries = this.entries.GetOrAdd(
+                   weakScopeReference,
+                   key =>
+                   {
+                       if (scope is INotifyWhenDisposed notifyScope)
+                       {
+                           notifyScope.Disposed += (o, e) => this.Clear(key);
+                       }
+
+                       return new ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>>();
+                   });
+
+            var cacheEntriesForBinding = scopedEntries.GetOrAdd(context.Binding.BindingConfiguration, new List<CacheEntry>());
+
+            lock (cacheEntriesForBinding)
+            {
+                cacheEntriesForBinding.Add(entry);
+            }
+        }
+
+        /// <summary>
+        /// Stores the specified context in the cache.
+        /// </summary>
+        /// <param name="context">The context to store.</param>
+        /// <param name="scope">The scope of the context.</param>
+        /// <param name="reference">The instance reference.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="scope"/> is <see langword="null"/>.</exception>
+        public void Remember(IContext context, object scope, InstanceReference reference)
+        {
+            Ensure.ArgumentNotNull(context, nameof(context));
+            Ensure.ArgumentNotNull(scope, nameof(scope));
+
+            var entry = new CacheEntry(context, reference);
+            var weakScopeReference = new ReferenceEqualWeakReference(scope);
+
+            var scopedEntries = this.entries.GetOrAdd(
+                   weakScopeReference,
+                   key =>
+                   {
+                       // to reduce allocations, we use the argument of the delegate instead of
+                       // using the "scope" argument directly
+                       var scopeToAdd = ((ReferenceEqualWeakReference)key).Target;
+                       if (scopeToAdd is INotifyWhenDisposed notifyScope)
+                       {
+                           notifyScope.Disposed += (o, e) => this.Clear(scopeToAdd);
+                       }
+
+                       return new ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>>();
+                   });
+
+            var cacheEntriesForBinding = scopedEntries.GetOrAdd(context.Binding.BindingConfiguration, new List<CacheEntry>());
+
+            lock (cacheEntriesForBinding)
+            {
+                cacheEntriesForBinding.Add(entry);
             }
         }
 
@@ -115,81 +164,173 @@ namespace Ninject.Activation.Caching
         /// Tries to retrieve an instance to re-use in the specified context.
         /// </summary>
         /// <param name="context">The context that is being activated.</param>
-        /// <returns>The instance for re-use, or <see langword="null"/> if none has been stored.</returns>
+        /// <returns>
+        /// The instance for re-use, or <see langword="null"/> if none has been stored.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public object TryGet(IContext context)
         {
+            Ensure.ArgumentNotNull(context, nameof(context));
+
             var scope = context.GetScope();
             if (scope == null)
             {
                 return null;
             }
 
-            lock (this.entries)
+            if (!this.entries.TryGetValue(scope, out ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>> bindings))
             {
-                Multimap<IBindingConfiguration, CacheEntry> bindings;
-                if (!this.entries.TryGetValue(scope, out bindings))
-                {
-                    return null;
-                }
-
-                foreach (var entry in bindings[context.Binding.BindingConfiguration])
-                {
-                    if (context.HasInferredGenericArguments)
-                    {
-                        var cachedArguments = entry.Context.GenericArguments;
-                        var arguments = context.GenericArguments;
-
-                        if (!cachedArguments.SequenceEqual(arguments))
-                        {
-                            continue;
-                        }
-                    }
-
-                    return entry.Reference.Instance;
-                }
-
                 return null;
             }
+
+            if (bindings.TryGetValue(context.Binding.BindingConfiguration, out List<CacheEntry> cacheEntriesForBinding))
+            {
+                lock (cacheEntriesForBinding)
+                {
+                    var entryCount = cacheEntriesForBinding.Count;
+                    for (var i = 0; i < entryCount; i++)
+                    {
+                        var entry = cacheEntriesForBinding[i];
+                        if (context.HasInferredGenericArguments)
+                        {
+                            var cachedArguments = entry.Context.GenericArguments;
+                            var arguments = context.GenericArguments;
+
+                            if (!cachedArguments.SequenceEqual(arguments))
+                            {
+                                continue;
+                            }
+                        }
+
+                        return entry.Reference.Instance;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Tries to retrieve an instance to re-use in the specified context and scope.
+        /// </summary>
+        /// <param name="context">The context that is being activated.</param>
+        /// <param name="scope">The scope in which the instance is being activated.</param>
+        /// <returns>
+        /// The instance for re-use, or <see langword="null"/> if none has been stored.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="scope"/> is <see langword="null"/>.</exception>
+        public object TryGet(IContext context, object scope)
+        {
+            Ensure.ArgumentNotNull(context, nameof(context));
+            Ensure.ArgumentNotNull(scope, nameof(scope));
+
+            if (!this.entries.TryGetValue(scope, out ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>> bindings))
+            {
+                return null;
+            }
+
+            if (bindings.TryGetValue(context.Binding.BindingConfiguration, out List<CacheEntry> cacheEntriesForBinding))
+            {
+                lock (cacheEntriesForBinding)
+                {
+                    var entryCount = cacheEntriesForBinding.Count;
+                    for (var i = 0; i < entryCount; i++)
+                    {
+                        var entry = cacheEntriesForBinding[i];
+                        if (context.HasInferredGenericArguments)
+                        {
+                            var cachedArguments = entry.Context.GenericArguments;
+                            var arguments = context.GenericArguments;
+
+                            if (!cachedArguments.SequenceEqual(arguments))
+                            {
+                                continue;
+                            }
+                        }
+
+                        return entry.Reference.Instance;
+                    }
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
         /// Deactivates and releases the specified instance from the cache.
         /// </summary>
         /// <param name="instance">The instance to release.</param>
-        /// <returns><see langword="True"/> if the instance was found and released; otherwise <see langword="false"/>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if the instance was found and released; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <remarks>
+        /// To improve concurrency we first compose the list of cache entries for the specified instance,
+        /// and only then - without holding a lock - deactivate these cache entries and clear any scope
+        /// for the instance.
+        /// </remarks>
         public bool Release(object instance)
         {
-            lock (this.entries)
+            List<CacheEntry> cacheEntriesForInstance = null;
+
+            foreach (var entry in this.entries)
             {
-                var instanceFound = false;
-                foreach (var bindingEntry in this.entries.Values.SelectMany(bindingEntries => bindingEntries.Values).ToList())
+                foreach (var bindingEntry in entry.Value)
                 {
-                    var instanceEntries = bindingEntry.Where(cacheEntry => ReferenceEquals(instance, cacheEntry.Reference.Instance)).ToList();
-                    foreach (var cacheEntry in instanceEntries)
+                    var cacheEntriesForBinding = bindingEntry.Value;
+                    lock (cacheEntriesForBinding)
                     {
-                        this.Forget(cacheEntry);
-                        bindingEntry.Remove(cacheEntry);
-                        instanceFound = true;
+                        var cacheEntryCount = cacheEntriesForBinding.Count;
+                        for (var i = cacheEntryCount - 1; i >= 0; i--)
+                        {
+                            var cacheEntry = cacheEntriesForBinding[i];
+                            if (ReferenceEquals(instance, cacheEntry.Reference.Instance))
+                            {
+                                if (cacheEntriesForInstance == null)
+                                {
+                                    cacheEntriesForInstance = new List<CacheEntry>();
+                                }
+
+                                cacheEntriesForInstance.Add(cacheEntry);
+                                cacheEntriesForBinding.RemoveAt(i);
+                            }
+                        }
                     }
                 }
-
-                return instanceFound;
             }
+
+            if (cacheEntriesForInstance != null)
+            {
+                foreach (var cacheEntry in cacheEntriesForInstance)
+                {
+                    // only deactivate cache entry, we'll be clearing any scope we have for it later
+                    this.Pipeline.Deactivate(cacheEntry.Context, cacheEntry.Reference);
+                }
+
+                // TODO: discuss whether this is actually necessary as:
+                // * it's unlikely that a cached instance itself is a scope
+                // * if there were a corresponding scope, then removing all instances from the
+                //   would allow the scope to be finalized. This means the scope itself would
+                //   be removed from the cache upon the next pruning run.
+                //
+                // Note that this will throw an ArgumentNullException if instance is null, but
+                // Ninject itself will never add a null instance to the cache.
+                this.Clear(instance);
+
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
-        /// Removes instances from the cache which should no longer be re-used.
+        /// Removes scopes that have been finalized from the cache.
         /// </summary>
         public void Prune()
         {
-            lock (this.entries)
+            foreach (var finalizedScope in this.GetFinalizedScopes())
             {
-                var disposedScopes = this.entries.Where(scope => !((ReferenceEqualWeakReference)scope.Key).IsAlive).Select(scope => scope).ToList();
-                foreach (var disposedScope in disposedScopes)
-                {
-                    this.entries.Remove(disposedScope.Key);
-                    this.Forget(GetAllBindingEntries(disposedScope.Value));
-                }
+                this.Clear(finalizedScope);
             }
         }
 
@@ -200,13 +341,29 @@ namespace Ninject.Activation.Caching
         /// <param name="scope">The scope whose instances should be deactivated.</param>
         public void Clear(object scope)
         {
-            lock (this.entries)
+            if (this.entries.TryRemove(scope, out ConcurrentDictionary<IBindingConfiguration, List<CacheEntry>> bindings))
             {
-                Multimap<IBindingConfiguration, CacheEntry> bindings;
-                if (this.entries.TryGetValue(scope, out bindings))
+                foreach (var binding in bindings)
                 {
-                    this.entries.Remove(scope);
-                    this.Forget(GetAllBindingEntries(bindings));
+                    var cacheEntriesForBinding = binding.Value;
+
+                    lock (cacheEntriesForBinding)
+                    {
+                        foreach (var cacheEntry in cacheEntriesForBinding)
+                        {
+                            this.Pipeline.Deactivate(cacheEntry.Context, cacheEntry.Reference);
+
+                            // TODO: discuss whether this is actually necessary as:
+                            // * it's unlikely that a cached instance itself is a scope
+                            // * if there were a corresponding scope, then removing all instances from the
+                            //   would allow the scope to be finalized. This means the scope itself would
+                            //   be removed from the cache upon the next pruning run.
+                            //
+                            // Note that this will throw an ArgumentNullException if instance is null, but
+                            // Ninject itself will never add a null instance to the cache.
+                            this.Clear(cacheEntry.Reference.Instance);
+                        }
+                    }
                 }
             }
         }
@@ -216,52 +373,72 @@ namespace Ninject.Activation.Caching
         /// </summary>
         public void Clear()
         {
-            lock (this.entries)
-            {
-                this.Forget(this.GetAllCacheEntries());
-                this.entries.Clear();
-            }
-        }
-
-        /// <summary>
-        /// Gets all entries for a binding within the selected scope.
-        /// </summary>
-        /// <param name="bindings">The bindings.</param>
-        /// <returns>All bindings of a binding.</returns>
-        private static IEnumerable<CacheEntry> GetAllBindingEntries(Multimap<IBindingConfiguration, CacheEntry> bindings)
-        {
-            return bindings.Values.SelectMany(bindingEntries => bindingEntries);
+            var cacheEntries = this.GetAllCacheEntries();
+            this.entries.Clear();
+            this.Deactivate(cacheEntries);
         }
 
         /// <summary>
         /// Gets all cache entries.
         /// </summary>
-        /// <returns>Returns all cache entries.</returns>
-        private IEnumerable<CacheEntry> GetAllCacheEntries()
+        /// <returns>
+        /// All cache entries.
+        /// </returns>
+        private List<CacheEntry> GetAllCacheEntries()
         {
-            return this.entries.SelectMany(scopeCache => GetAllBindingEntries(scopeCache.Value));
+            var allCacheEntries = new List<CacheEntry>();
+
+            foreach (var scopeEntry in this.entries)
+            {
+                foreach (var bindingEntry in scopeEntry.Value)
+                {
+                    var cacheEntriesForBinding = bindingEntry.Value;
+
+                    lock (cacheEntriesForBinding)
+                    {
+                        foreach (var cacheEntry in cacheEntriesForBinding)
+                        {
+                            allCacheEntries.Add(cacheEntry);
+                        }
+                    }
+                }
+            }
+
+            return allCacheEntries;
         }
 
         /// <summary>
-        /// Forgets the specified cache entries.
+        /// Deactivates the specified cache entries.
         /// </summary>
         /// <param name="cacheEntries">The cache entries.</param>
-        private void Forget(IEnumerable<CacheEntry> cacheEntries)
+        private void Deactivate(List<CacheEntry> cacheEntries)
         {
-            foreach (var entry in cacheEntries.ToList())
+            foreach (var entry in cacheEntries)
             {
-                this.Forget(entry);
+                this.Pipeline.Deactivate(entry.Context, entry.Reference);
             }
         }
 
         /// <summary>
-        /// Forgets the specified entry.
+        /// Returns a list of finalizes scoped for which we currently still have an entry in our cache.
         /// </summary>
-        /// <param name="entry">The entry.</param>
-        private void Forget(CacheEntry entry)
+        /// <returns>
+        /// The finalized scopes for which we current still have an entry in our cache.
+        /// </returns>
+        private List<ReferenceEqualWeakReference> GetFinalizedScopes()
         {
-            this.Clear(entry.Reference.Instance);
-            this.Pipeline.Deactivate(entry.Context, entry.Reference);
+            var finalizedScopes = new List<ReferenceEqualWeakReference>();
+
+            foreach (var entry in this.entries)
+            {
+                var scopeReference = (ReferenceEqualWeakReference)entry.Key;
+                if (!scopeReference.IsAlive)
+                {
+                    finalizedScopes.Add(scopeReference);
+                }
+            }
+
+            return finalizedScopes;
         }
 
         /// <summary>
@@ -278,7 +455,7 @@ namespace Ninject.Activation.Caching
             {
                 this.Context = context;
                 this.Reference = reference;
-           }
+            }
 
             /// <summary>
             /// Gets the context of the instance.

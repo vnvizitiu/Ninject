@@ -2,9 +2,10 @@
 {
     using FluentAssertions;
     using Ninject.Tests.Integration.EnumerableDependenciesTests.Fakes;
+    using System.Collections.Generic;
     using Xunit;
 
-   public class WhenServiceRequestsConstrainedListOfDependencies : ConstrainedDependenciesContext
+    public class WhenServiceRequestsConstrainedListOfDependencies : ConstrainedDependenciesContext
     {
         [Fact]
         public void ServiceIsInjectedWithAllDependenciesThatMatchTheConstraint()
@@ -16,6 +17,7 @@
             var parent = this.Kernel.Get<IParent>();
 
             VerifyInjection(parent);
+            parent.Children.Should().BeOfType<List<IChild>>();
         }
 
         [Fact]
@@ -28,6 +30,7 @@
             var parent = this.Kernel.Get<IParent>();
 
             parent.Should().NotBeNull();
+            parent.Children.Should().BeOfType<List<IChild>>();
             parent.Children.Count.Should().Be(0);
         }
     }

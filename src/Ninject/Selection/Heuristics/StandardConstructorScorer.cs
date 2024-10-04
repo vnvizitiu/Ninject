@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="StandardConstructorScorer.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,18 +17,18 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Selection.Heuristics
 {
     using System;
     using System.Collections;
-    using System.Diagnostics.Contracts;
     using System.Linq;
-    using System.Reflection;
+
     using Ninject.Activation;
     using Ninject.Components;
     using Ninject.Infrastructure;
+    using Ninject.Infrastructure.Language;
     using Ninject.Parameters;
     using Ninject.Planning.Directives;
     using Ninject.Planning.Targets;
@@ -41,20 +39,40 @@ namespace Ninject.Selection.Heuristics
     /// </summary>
     public class StandardConstructorScorer : NinjectComponent, IConstructorScorer
     {
+        private readonly INinjectSettings settings;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StandardConstructorScorer"/> class.
+        /// </summary>
+        /// <param name="settings">The ninject settings.</param>
+        public StandardConstructorScorer(INinjectSettings settings)
+        {
+            this.settings = settings;
+        }
+
         /// <summary>
         /// Gets the score for the specified constructor.
         /// </summary>
         /// <param name="context">The injection context.</param>
-        /// <param name="directive">The constructor.</param>
-        /// <returns>The constructor's score.</returns>
+        /// <param name="directive">The constructor injection directive.</param>
+        /// <returns>
+        /// The constructor's score.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="directive"/> is <see langword="null"/>.</exception>
         public virtual int Score(IContext context, ConstructorInjectionDirective directive)
         {
-            Contract.Requires(context != null);
-            Contract.Requires(directive != null);
+            Ensure.ArgumentNotNull(context, nameof(context));
+            Ensure.ArgumentNotNull(directive, nameof(directive));
 
-            if (directive.HasInjectAttribute)
+            if (directive.Constructor.HasAttribute(this.settings.InjectAttribute))
             {
                 return int.MaxValue;
+            }
+
+            if (directive.Constructor.HasAttribute(typeof(ObsoleteAttribute)))
+            {
+                return int.MinValue;
             }
 
             var score = 1;
@@ -83,28 +101,51 @@ namespace Ninject.Selection.Heuristics
         }
 
         /// <summary>
-        /// Checkes whether a binding exists for a given target.
+        /// Checks whether a binding exists for a given target.
         /// </summary>
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
-        /// <returns>Whether a binding exists for the target in the given context.</returns>
+        /// <returns>
+        /// <see langword="true"/> if a binding exists for the target in the given context; otherwise,
+        /// <see langword="false"/>.
+        /// </returns>
         protected virtual bool BindingExists(IContext context, ITarget target)
         {
             return this.BindingExists(context.Kernel, context, target);
         }
 
         /// <summary>
-        /// Checkes whether a binding exists for a given target on the specified kernel.
+        /// Checks whether a binding exists for a given target on the specified kernel.
         /// </summary>
         /// <param name="kernel">The kernel.</param>
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
-        /// <returns>Whether a binding exists for the target in the given context.</returns>
+        /// <returns>
+        /// <see langword="true"/> if a binding exists for the target in the given context; otherwise,
+        /// <see langword="false"/>.
+        /// </returns>
         protected virtual bool BindingExists(IReadOnlyKernel kernel, IContext context, ITarget target)
         {
-            var targetType = this.GetTargetType(target);
-            return kernel.GetBindings(targetType).Any(b => !b.IsImplicit)
-                   || target.HasDefaultValue;
+            if (target.HasDefaultValue)
+            {
+                return true;
+            }
+
+            var targetType = GetTargetType(target);
+            var bindings = kernel.GetBindings(targetType);
+            if (bindings.Length > 0)
+            {
+                var request = context.Request.CreateChild(targetType, context, target);
+                foreach (var binding in bindings)
+                {
+                    if (!binding.IsImplicit && binding.Matches(request))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -112,15 +153,24 @@ namespace Ninject.Selection.Heuristics
         /// </summary>
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
-        /// <returns>Whether a parameter exists for the target in the given context.</returns>
+        /// <returns>
+        /// <see langword="true"/> if a parameter exists for the target in the given context;
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
         protected virtual bool ParameterExists(IContext context, ITarget target)
         {
-            return context
-                .Parameters.OfType<IConstructorArgument>()
-                .Any(parameter => parameter.AppliesToTarget(context, target));
+            foreach (var parameter in context.Parameters)
+            {
+                if (parameter is IConstructorArgument ctorArgument && ctorArgument.AppliesToTarget(context, target))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
-        private Type GetTargetType(ITarget target)
+        private static Type GetTargetType(ITarget target)
         {
             var targetType = target.Type;
 
@@ -129,13 +179,9 @@ namespace Ninject.Selection.Heuristics
                 targetType = targetType.GetElementType();
             }
 
-            var typeInfo = targetType.GetTypeInfo();
-            if (typeInfo.IsGenericType)
+            if (targetType.IsGenericType && targetType.GetInterfaces().Any(type => type == typeof(IEnumerable)))
             {
-                if (typeInfo.ImplementedInterfaces.Any(type => type == typeof(IEnumerable)))
-                {
-                    targetType = typeInfo.GenericTypeArguments[0];
-                }
+                targetType = targetType.GetGenericArguments()[0];
             }
 
             return targetType;

@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="IContext.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,14 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation
 {
     using System;
     using System.Collections.Generic;
+
+    using Ninject.Activation.Caching;
     using Ninject.Parameters;
     using Ninject.Planning;
     using Ninject.Planning.Bindings;
@@ -55,9 +55,14 @@ namespace Ninject.Activation
         IPlan Plan { get; set; }
 
         /// <summary>
+        /// Gets the cache component.
+        /// </summary>
+        ICache Cache { get; }
+
+        /// <summary>
         /// Gets the parameters that were passed to manipulate the activation process.
         /// </summary>
-        ICollection<IParameter> Parameters { get; }
+        IReadOnlyList<IParameter> Parameters { get; }
 
         /// <summary>
         /// Gets the generic arguments for the request, if any.
@@ -86,11 +91,5 @@ namespace Ninject.Activation
         /// </summary>
         /// <returns>The resolved instance.</returns>
         object Resolve();
-
-        /// <summary>
-        /// Builds the plan for the specified type.
-        /// </summary>
-        /// <param name="type">The type used by the context.</param>
-        void BuildPlan(Type type);
     }
 }

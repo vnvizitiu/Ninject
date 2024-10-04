@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="BindingConfiguration.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,16 +17,17 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Bindings
 {
     using System;
     using System.Collections.Generic;
+
     using Ninject.Activation;
+    using Ninject.Components;
     using Ninject.Infrastructure;
     using Ninject.Parameters;
-    using Ninject.Selection;
 
     /// <summary>
     /// The configuration of a binding.
@@ -45,7 +44,6 @@ namespace Ninject.Planning.Bindings
             this.ActivationActions = new List<Action<IContext, object>>();
             this.DeactivationActions = new List<Action<IContext, object>>();
             this.ScopeCallback = StandardScopeCallbacks.Transient;
-            this.InitializeProviderCallback = s => { };
         }
 
         /// <summary>
@@ -89,7 +87,7 @@ namespace Ninject.Planning.Bindings
         /// <summary>
         /// Gets the parameters defined for the binding.
         /// </summary>
-        public ICollection<IParameter> Parameters { get; private set; }
+        public IList<IParameter> Parameters { get; private set; }
 
         /// <summary>
         /// Gets the actions that should be called after instances are activated via the binding.
@@ -102,17 +100,22 @@ namespace Ninject.Planning.Bindings
         public ICollection<Action<IContext, object>> DeactivationActions { get; private set; }
 
         /// <summary>
-        /// Gets or sets the InitizalizeProviderCallback action
-        /// </summary>
-        public Action<ISelector> InitializeProviderCallback { get; set; }
-
-        /// <summary>
         /// Gets the provider for the binding.
         /// </summary>
         /// <param name="context">The context.</param>
-        /// <returns>The provider to use.</returns>
+        /// <returns>
+        /// The provider to use.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public IProvider GetProvider(IContext context)
         {
+            Ensure.ArgumentNotNull(context, nameof(context));
+
+            if (this.ProviderCallback == null)
+            {
+                throw new ActivationException(ExceptionFormatter.ProviderCallbackIsNull(context));
+            }
+
             return this.ProviderCallback(context);
         }
 
@@ -120,9 +123,14 @@ namespace Ninject.Planning.Bindings
         /// Gets the scope for the binding, if any.
         /// </summary>
         /// <param name="context">The context.</param>
-        /// <returns>The object that will act as the scope, or <see langword="null"/> if the service is transient.</returns>
+        /// <returns>
+        /// The object that will act as the scope, or <see langword="null"/> if the service is transient.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public object GetScope(IContext context)
         {
+            Ensure.ArgumentNotNull(context, nameof(context));
+
             return this.ScopeCallback(context);
         }
 
@@ -130,9 +138,14 @@ namespace Ninject.Planning.Bindings
         /// Determines whether the specified request satisfies the conditions defined on this binding.
         /// </summary>
         /// <param name="request">The request.</param>
-        /// <returns><c>True</c> if the request satisfies the conditions; otherwise <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if the request satisfies the conditions; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
         public bool Matches(IRequest request)
         {
+            Ensure.ArgumentNotNull(request, nameof(request));
+
             return this.Condition == null || this.Condition(request);
         }
     }

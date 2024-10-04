@@ -1,33 +1,31 @@
 configuration: Release
 
-init:
-  - cmd: set
+image: Visual Studio 2019
 
-install:
-  - cmd: appveyor DownloadFile https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
-  - cmd: nuget install GitVersion.CommandLine -SolutionDir %APPVEYOR_BUILD_FOLDER% -Verbosity quiet -ExcludeVersion -pre
-  - cmd: nuget install gitlink -SolutionDir %APPVEYOR_BUILD_FOLDER% -Verbosity quiet -ExcludeVersion -pre
+cache:
+  - '%LocalAppData%\NuGet\v3-cache -> **\*.csproj'
 
 before_build:
-  - cmd: nuget restore Ninject.sln
-  - cmd: '.\packages\GitVersion.CommandLine\tools\GitVersion.exe /l console /output buildserver /updateAssemblyInfo'
+  - dotnet restore --verbosity quiet
 
 build:
-  verbosity: normal
   parallel: true
-  project: Ninject.sln
+  verbosity: minimal
 
-after_build:
-  - cmd: '.\packages\gitlink\lib\net45\GitLink.exe . -f Ninject.sln -u https://github.com/Ninject/Ninject -s %APPVEYOR_REPO_COMMIT% -errorsaswarnings'
-  - cmd: dotnet pack .\src\Ninject --configuration %Configuration% --version-suffix %GitVersion_BuildMetaDataPadded%
-  - cmd: appveyor PushArtifact ".\src\Ninject\bin\%Configuration%\Ninject.%GitVersion_NuGetVersion%-beta-%GitVersion_BuildMetaDataPadded%.nupkg"
+test_script:
+  - dotnet test --configuration Release --no-build --collect="Code Coverage" src\Ninject.Test
+  - nuget install Microsoft.CodeCoverage -x -Verbosity quiet
+  - for /f %%G in ('dir /b /s *.coverage') do Microsoft.CodeCoverage\build\netstandard1.0\CodeCoverage\CodeCoverage analyze /output:%%~dpnG.coveragexml "%%G"
+  - nuget install Codecov -x -Verbosity quiet
+  - for /f %%G in ('dir /b /s *.coveragexml') do Codecov\tools\codecov -f "%%G"
 
-test:
-  assemblies:
-    - '**\Ninject.Tests.dll'
+artifacts:
+  - path: 'src\**\*.nupkg'
+  - path: 'src\**\*.snupkg'
 
 deploy:
   provider: NuGet
   api_key:
-    secure: 61GnKhv/vndUGtmAu9tITU0MCRhBO+WVL3CDXk5TZLxbDpHkjkCTnyzxp0yrGKTa
-  artifact: /.*\.nupkg/
+    secure: ObZpjlJ2soInYT4Ooi+u2KeQQ1LRsBbRA9uPU7ctOma7CZxxNN8hPUVjwFUY2wS1
+  on:
+    appveyor_repo_tag: true

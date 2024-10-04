@@ -7,7 +7,6 @@ namespace Ninject.Tests.Unit
     using Ninject.Infrastructure.Language;
     using Xunit;
 
-#if !SILVERLIGHT
     public class ExtensionsForMemberInfoTest
     {
         [Fact]
@@ -35,7 +34,7 @@ namespace Ninject.Tests.Unit
             this.TestGetCustomAttributesExtended("ProtectedProperty");
             this.TestGetCustomAttributesExtended("PrivateProperty");
         }
-        
+
         [Fact]
         public void GetCustomAttributesExtendedForAttributesOnBaseClass()
         {
@@ -57,19 +56,11 @@ namespace Ninject.Tests.Unit
             this.TestIndexerHasAttribute(typeof(InheritedPropertyAttributeTest), typeof(int), typeof(NotInheritedInjectAttribute), false);
         }
 
-        public void TestIndexerHasAttribute(Type testObjectType, Type indexerType, Type attributeType, bool expectedResult)
+        private void TestIndexerHasAttribute(Type testObjectType, Type indexerType, Type attributeType, bool expectedResult)
         {
-#if !WINRT
             var propertyInfo =
                 testObjectType.GetProperties()
                     .First(pi => pi.Name == "Item" && pi.GetIndexParameters().Single().ParameterType == indexerType);
-#else
-            var propertyInfo =
-                testObjectType.GetRuntimeProperties()
-                              .First(pi => pi.Name == "Item" && pi.GetIndexParameters()
-                                                                  .Single()
-                                                                  .ParameterType == indexerType);
-#endif
 
             var hasInjectAttribute = propertyInfo.HasAttribute(attributeType);
 
@@ -130,28 +121,22 @@ namespace Ninject.Tests.Unit
             this.TestHasAttribute(propertyAttributeClass, propertyName, typeof(NotInheritedInjectAttribute), false);
             this.TestHasAttribute(propertyAttributeClass, propertyName, typeof(NamedAttribute), false);
         }
-        
+
         private void TestHasAttribute(object testObject, string attributeName, Type attributeType, bool expectedValue)
         {
-#if !WINRT
             var propertyInfo = testObject.GetType()
                 .GetProperty(attributeName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-#else
-            var propertyInfo = testObject.GetType()
-                                         .GetRuntimeProperties()
-                                         .Single(pi => pi.Name == attributeName);
-#endif
-            
+
             bool hasAttribute = propertyInfo.HasAttribute(attributeType);
 
             hasAttribute.Should().Be(expectedValue);
         }
 
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter, AllowMultiple = true, Inherited = false)]
-        public class NotInheritedInjectAttribute : InjectAttribute
+        public sealed class NotInheritedInjectAttribute : InjectAttribute
         {
         }
-        
+
         public class PropertyAttributeTest
         {
             [Inject]
@@ -234,7 +219,6 @@ namespace Ninject.Tests.Unit
                 {
                 }
             }
-        }    
+        }
     }
-#endif
 }

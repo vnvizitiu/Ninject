@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="ReadOnlyKernel.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,17 +17,17 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics.Contracts;
     using System.Linq;
 
     using Ninject.Activation;
     using Ninject.Activation.Caching;
+    using Ninject.Components;
     using Ninject.Infrastructure;
     using Ninject.Infrastructure.Disposal;
     using Ninject.Infrastructure.Introspection;
@@ -38,71 +36,78 @@ namespace Ninject
     using Ninject.Planning;
     using Ninject.Planning.Bindings;
     using Ninject.Planning.Bindings.Resolvers;
-    using Ninject.Selection;
+    using Ninject.Selection.Heuristics;
     using Ninject.Syntax;
 
     /// <summary>
-    /// The readonly kernel
+    /// The readonly kernel.
     /// </summary>
     public class ReadOnlyKernel : DisposableObject, IReadOnlyKernel
     {
+        private readonly INinjectSettings settings;
         private readonly ICache cache;
         private readonly IPlanner planner;
+        private readonly IConstructorScorer constructorScorer;
         private readonly IPipeline pipeline;
         private readonly IBindingPrecedenceComparer bindingPrecedenceComparer;
-        private readonly IEnumerable<IBindingResolver> bindingResolvers;
-        private readonly IEnumerable<IMissingBindingResolver> missingBindingResolvers;
+        private readonly IExceptionFormatter exceptionFormatter;
+        private readonly List<IBindingResolver> bindingResolvers;
+        private readonly List<IMissingBindingResolver> missingBindingResolvers;
         private readonly object missingBindingCacheLock = new object();
 
-        private Dictionary<Type, List<IBinding>> bindingCache = new Dictionary<Type, List<IBinding>>();
-        private Dictionary<Type, IEnumerable<IBinding>> bindings = new Dictionary<Type, IEnumerable<IBinding>>();
+        private Dictionary<Type, IBinding[]> bindingCache = new Dictionary<Type, IBinding[]>(new ReferenceEqualityTypeComparer());
+        private Dictionary<Type, ICollection<IBinding>> bindings = new Dictionary<Type, ICollection<IBinding>>(new ReferenceEqualityTypeComparer());
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ReadOnlyKernel"/> class.
         /// </summary>
-        /// <param name="bindings">The preconfigured bindings</param>
-        /// <param name="cache">Dependency injection for <see cref="ICache"/></param>
-        /// <param name="planner">Dependency injection for <see cref="IPlanner"/></param>
-        /// <param name="pipeline">Dependency injection for <see cref="IPipeline"/></param>
-        /// <param name="bindingPrecedenceComparer">Dependency injection for <see cref="IBindingPrecedenceComparer"/></param>
-        /// <param name="bindingResolvers">Dependency injection for all binding resolvers</param>
-        /// <param name="missingBindingResolvers">Dependency injection for all missng binding resolvers</param>
-        /// <param name="settings">Dependency injection for for <see cref="INinjectSettings"/></param>
-        /// <param name="selector">Dependency injection for <see cref="ISelector"/></param>
-        public ReadOnlyKernel(
-            Multimap<Type, IBinding> bindings,
+        /// <param name="settings">The <see cref="INinjectSettings"/>.</param>
+        /// <param name="bindings">The preconfigured bindings.</param>
+        /// <param name="cache">The <see cref="ICache"/> component.</param>
+        /// <param name="planner">The <see cref="IPlanner"/> component.</param>
+        /// <param name="constructorScorer">The <see cref="IConstructorScorer"/> component.</param>
+        /// <param name="pipeline">The <see cref="IPipeline"/> component.</param>
+        /// <param name="exceptionFormatter">The <see cref="IExceptionFormatter"/> component.</param>
+        /// <param name="bindingPrecedenceComparer">The <see cref="IBindingPrecedenceComparer"/> component.</param>
+        /// <param name="bindingResolvers">The binding resolvers.</param>
+        /// <param name="missingBindingResolvers">The missing binding resolvers.</param>
+        internal ReadOnlyKernel(
+            INinjectSettings settings,
+            Dictionary<Type, ICollection<IBinding>> bindings,
             ICache cache,
             IPlanner planner,
+            IConstructorScorer constructorScorer,
             IPipeline pipeline,
+            IExceptionFormatter exceptionFormatter,
             IBindingPrecedenceComparer bindingPrecedenceComparer,
-            IEnumerable<IBindingResolver> bindingResolvers,
-            IEnumerable<IMissingBindingResolver> missingBindingResolvers,
-            INinjectSettings settings,
-            ISelector selector)
+            List<IBindingResolver> bindingResolvers,
+            List<IMissingBindingResolver> missingBindingResolvers)
         {
+            this.settings = settings;
+            this.bindings = bindings;
             this.bindingResolvers = bindingResolvers;
             this.missingBindingResolvers = missingBindingResolvers;
             this.cache = cache;
             this.planner = planner;
+            this.constructorScorer = constructorScorer;
             this.pipeline = pipeline;
+            this.exceptionFormatter = exceptionFormatter;
             this.bindingPrecedenceComparer = bindingPrecedenceComparer;
-            this.Settings = settings;
 
-            this.AddReadonlyKernelBinding<IReadOnlyKernel>(this, bindings);
-            this.AddReadonlyKernelBinding<IResolutionRoot>(this, bindings);
-
-            this.bindings = bindings.Keys.ToDictionary(type => type, type => bindings[type]);
-            this.InitializeBindings(selector);
+            this.AddReadOnlyKernelBinding<IReadOnlyKernel>(this, bindings);
+            this.AddReadOnlyKernelBinding<IResolutionRoot>(this, bindings);
         }
 
-        /// <inheritdoc />
-        public INinjectSettings Settings { get; private set; }
-
-        /// <inheritdoc />
+        /// <summary>
+        /// Injects the specified existing instance, without managing its lifecycle.
+        /// </summary>
+        /// <param name="instance">The instance to inject.</param>
+        /// <param name="parameters">The parameters to pass to the request.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
         public void Inject(object instance, params IParameter[] parameters)
         {
-            Contract.Requires(instance != null);
-            Contract.Requires(parameters != null);
+            Ensure.ArgumentNotNull(instance, nameof(instance));
 
             var service = instance.GetType();
 
@@ -116,100 +121,159 @@ namespace Ninject
             this.pipeline.Activate(context, reference);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// Determines whether the specified request can be resolved.
+        /// </summary>
+        /// <param name="request">The request.</param>
+        /// <returns>
+        /// <see langword="true"/> if the request can be resolved; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
         public bool CanResolve(IRequest request)
         {
-            Contract.Requires(request != null);
-            return this.GetBindings(request.Service).Any(b => this.SatifiesRequest(request, b));
-        }
+            Ensure.ArgumentNotNull(request, nameof(request));
 
-        /// <inheritdoc />
-        public bool CanResolve(IRequest request, bool ignoreImplicitBindings)
-        {
-            Contract.Requires(request != null);
-            return this.GetBindings(request.Service)
-                .Any(binding => (!ignoreImplicitBindings || !binding.IsImplicit) && this.SatifiesRequest(request, binding));
-        }
-
-        /// <inheritdoc />
-        public IEnumerable<object> Resolve(IRequest request)
-        {
-            Contract.Requires(request != null);
-
-            return this.Resolve(request, true);
-        }
-
-        /// <inheritdoc />
-        public IRequest CreateRequest(Type service, Func<IBindingMetadata, bool> constraint, IEnumerable<IParameter> parameters, bool isOptional, bool isUnique)
-        {
-            Contract.Requires(service != null);
-            Contract.Requires(parameters != null);
-
-            return new Request(service, constraint, parameters, null, isOptional, isUnique);
-        }
-
-        /// <inheritdoc />
-        public bool Release(object instance)
-        {
-            Contract.Requires(instance != null);
-            return this.cache.Release(instance);
-        }
-
-        /// <inheritdoc />
-        public object GetService(Type serviceType)
-        {
-            return this.Get(serviceType);
-        }
-
-        /// <inheritdoc />
-        public override void Dispose(bool disposing)
-        {
-            if (disposing && !this.IsDisposed)
+            foreach (var binding in this.GetBindingsCore(request.Service))
             {
-                this.cache.Clear();
+                if (this.SatifiesRequest(request, binding))
+                {
+                    return true;
+                }
             }
 
-            base.Dispose(disposing);
-        }
-
-        /// <inheritdoc />
-        public IEnumerable<IBinding> GetBindings(Type service)
-        {
-            Contract.Requires(service != null);
-
-            List<IBinding> result;
-            if (this.bindingCache.TryGetValue(service, out result))
-            {
-                return result;
-            }
-
-            var newBindingCache = new Dictionary<Type, List<IBinding>>(this.bindingCache);
-            if (newBindingCache.TryGetValue(service, out result))
-            {
-                return result;
-            }
-
-            result = this.bindingResolvers.SelectMany(resolver => resolver.Resolve(this.bindings, service))
-                .OrderByDescending(b => b, this.bindingPrecedenceComparer)
-                .ToList();
-            if (result.Count > 0)
-            {
-                newBindingCache[service] = result;
-
-                // We might loose other entries in case multiple cache entries are added at the same time
-                // But this is no problem in this case they will be added later again.
-                this.bindingCache = newBindingCache;
-            }
-
-            return result;
+            return false;
         }
 
         /// <summary>
-        /// Returns a predicate that can determine if a given IBinding matches the request.
+        /// Determines whether the specified request can be resolved.
         /// </summary>
-        /// <param name="request">The request/</param>
-        /// <param name="binding">The binding</param>
-        /// <returns>A predicate that can determine if a given IBinding matches the request.</returns>
+        /// <param name="request">The request.</param>
+        /// <param name="ignoreImplicitBindings">if set to <see langword="true"/> implicit bindings are ignored.</param>
+        /// <returns>
+        /// <see langword="true"/> if the request can be resolved; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+        public bool CanResolve(IRequest request, bool ignoreImplicitBindings)
+        {
+            Ensure.ArgumentNotNull(request, nameof(request));
+
+            foreach (var binding in this.GetBindings(request.Service))
+            {
+                if ((!ignoreImplicitBindings || !binding.IsImplicit) && this.SatifiesRequest(request, binding))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Resolves instances for the specified request. The instances are not actually resolved
+        /// until a consumer iterates over the enumerator.
+        /// </summary>
+        /// <param name="request">The request to resolve.</param>
+        /// <returns>
+        /// An enumerator of instances that match the request.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+        public IEnumerable<object> Resolve(IRequest request)
+        {
+            Ensure.ArgumentNotNull(request, nameof(request));
+
+            return this.ResolveAll(request, true);
+        }
+
+        /// <summary>
+        /// Resolves an instance for the specified request.
+        /// </summary>
+        /// <param name="request">The request to resolve.</param>
+        /// <returns>
+        /// An instance that matches the request, or <see langword="null"/> if <see cref="IRequest.IsUnique"/> is
+        /// <see langword="false"/> and there is no matching binding.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ActivationException">More than one matching bindings is available for the request, and <see cref="IRequest.IsUnique"/> is <see langword="true"/>.</exception>
+        public object ResolveSingle(IRequest request)
+        {
+            Ensure.ArgumentNotNull(request, nameof(request));
+
+            return this.ResolveSingle(request, true);
+        }
+
+        /// <summary>
+        /// Creates a request for the specified service.
+        /// </summary>
+        /// <param name="service">The service that is being requested.</param>
+        /// <param name="constraint">The constraint to apply to the bindings to determine if they match the request.</param>
+        /// <param name="parameters">The parameters to pass to the resolution.</param>
+        /// <param name="isOptional"><see langword="true"/> if the request is optional; otherwise, <see langword="false"/>.</param>
+        /// <param name="isUnique"><see langword="true"/> if the request should return a unique result; otherwise, <see langword="false"/>.</param>
+        /// <returns>
+        /// The request for the specified service.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
+        public IRequest CreateRequest(Type service, Func<IBindingMetadata, bool> constraint, IReadOnlyList<IParameter> parameters, bool isOptional, bool isUnique)
+        {
+            return new Request(service, constraint, parameters, null, isOptional, isUnique);
+        }
+
+        /// <summary>
+        /// Deactivates and releases the specified instance if it is currently managed by Ninject.
+        /// </summary>
+        /// <param name="instance">The instance to release.</param>
+        /// <returns>
+        /// <see langword="true"/> if the instance was found and released; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="instance"/> is <see langword="null"/>.</exception>
+        public bool Release(object instance)
+        {
+            Ensure.ArgumentNotNull(instance, nameof(instance));
+
+            return this.cache.Release(instance);
+        }
+
+        /// <summary>
+        /// Gets the service object of the specified type.
+        /// </summary>
+        /// <param name="serviceType">The service type.</param>
+        /// <returns>
+        /// The service object.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="serviceType"/> is <see langword="null"/>.</exception>
+        public object GetService(Type serviceType)
+        {
+            Ensure.ArgumentNotNull(serviceType, nameof(serviceType));
+
+            return this.settings.ThrowOnGetServiceNotFound
+                ? this.Get(serviceType)
+                : this.TryGet(serviceType);
+        }
+
+        /// <summary>
+        /// Gets the bindings registered for the specified service.
+        /// </summary>
+        /// <param name="service">The service in question.</param>
+        /// <returns>
+        /// A series of bindings that are registered for the service.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        public IBinding[] GetBindings(Type service)
+        {
+            Ensure.ArgumentNotNull(service, nameof(service));
+
+            return this.GetBindingsCore(service);
+        }
+
+        /// <summary>
+        /// Returns a value incating whether a given <see cref="IBinding"/> matches the request.
+        /// </summary>
+        /// <param name="request">The request/.</param>
+        /// <param name="binding">The <see cref="IBinding"/>.</param>
+        /// <returns>
+        /// <see langword="true"/> if the <see cref="IBinding"/> matches the request; otherwise, <see langword="false"/>.
+        /// </returns>
         protected virtual bool SatifiesRequest(IRequest request, IBinding binding)
         {
             return binding.Matches(request) && request.Matches(binding);
@@ -219,10 +283,13 @@ namespace Ninject
         /// Attempts to handle a missing binding for a request.
         /// </summary>
         /// <param name="request">The request.</param>
-        /// <returns><c>True</c> if the missing binding can be handled; otherwise <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if the missing binding can be handled; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
         protected virtual bool HandleMissingBinding(IRequest request)
         {
-            Contract.Requires(request != null);
+            Ensure.ArgumentNotNull(request, nameof(request));
 
             var bindings = this.GetBindingsFromFirstResolverThatReturnsAtLeastOneBinding(request);
             if (bindings == null)
@@ -230,7 +297,7 @@ namespace Ninject
                 return false;
             }
 
-            bindings.Map(binding => binding.IsImplicit = true);
+            bindings.ForEach(binding => binding.IsImplicit = true);
 
             lock (this.missingBindingCacheLock)
             {
@@ -239,25 +306,22 @@ namespace Ninject
                     return true;
                 }
 
-                var newBindings = new Dictionary<Type, IEnumerable<IBinding>>(this.bindings);
+                var newBindings = new Dictionary<Type, ICollection<IBinding>>(this.bindings, new ReferenceEqualityTypeComparer());
                 bindings.GroupBy(b => b.Service, b => b, (service, b) => new { service, bindings = b })
-                    .Map(
-                        serviceGroup =>
-                            {
-                                IEnumerable<IBinding> existingBindings;
-                                if (newBindings.TryGetValue(serviceGroup.service, out existingBindings))
-                                {
-                                    var newBindingList = new List<IBinding>(existingBindings);
-                                    newBindingList.AddRange(serviceGroup.bindings);
-                                    newBindings[serviceGroup.service] = newBindingList;
-                                }
-                                else
-                                {
-                                    newBindings[serviceGroup.service] =
-                                        new List<IBinding>(serviceGroup.bindings);
-                                }
-                            });
-
+                                    .Map(
+                serviceGroup =>
+                {
+                    if (newBindings.TryGetValue(serviceGroup.service, out ICollection<IBinding> existingBindings))
+                    {
+                        var newBindingList = new List<IBinding>(existingBindings);
+                        newBindingList.AddRange(serviceGroup.bindings);
+                        newBindings[serviceGroup.service] = newBindingList;
+                    }
+                    else
+                    {
+                        newBindings[serviceGroup.service] = new List<IBinding>(serviceGroup.bindings);
+                    }
+                });
                 this.bindings = newBindings;
             }
 
@@ -272,20 +336,14 @@ namespace Ninject
         /// <returns>The created context.</returns>
         protected virtual IContext CreateContext(IRequest request, IBinding binding)
         {
-            Contract.Requires(request != null);
-            Contract.Requires(binding != null);
-
-            return new Context(this, request, binding, this.cache, this.planner, this.pipeline);
+            return new Context(this, this.settings, request, binding, this.cache, this.planner, this.pipeline, this.exceptionFormatter);
         }
 
-        private IEnumerable<object> ResolveWithMissingBindings(IRequest request, bool handleMissingBindings)
+        private IEnumerable<object> ResolveAllWithMissingBindings(IRequest request, bool handleMissingBindings)
         {
-            if (handleMissingBindings)
+            if (handleMissingBindings && this.HandleMissingBinding(request))
             {
-                if (this.HandleMissingBinding(request))
-                {
-                    return this.Resolve(request, false);
-                }
+                return this.ResolveAll(request, true);
             }
 
             if (request.IsOptional)
@@ -293,77 +351,311 @@ namespace Ninject
                 return Enumerable.Empty<object>();
             }
 
-            throw new ActivationException(ExceptionFormatter.CouldNotResolveBinding(request));
+            throw new ActivationException(this.exceptionFormatter.CouldNotResolveBinding(request));
         }
 
-        private IEnumerable<object> ResolveMultiple(IRequest request)
+        /// <summary>
+        /// Resolves an instance for the specified request.
+        /// </summary>
+        /// <param name="request">The request to resolve.</param>
+        /// <param name="handleMissingBindings"><see langword="true"/> to attempt to handle a missing binding request; otherwise, <see langword="false"/>.</param>
+        /// <returns>
+        /// An instance that matches the request, or <see langword="null"/> if <see cref="IRequest.IsUnique"/> is
+        /// <see langword="false"/> and there is no matching binding.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ActivationException">More than one matching bindings is available for the request, and <see cref="IRequest.IsUnique"/> is <see langword="true"/>.</exception>
+        private object ResolveSingle(IRequest request, bool handleMissingBindings)
         {
-            var selectedBindings = this.GetBindings(request.Service).Where(b => this.SatifiesRequest(request, b));
-            var skipImplicit = false;
-
-            foreach (var binding in selectedBindings.TakeWhile(binding => !binding.IsImplicit || !skipImplicit))
-            {
-                skipImplicit = !binding.IsImplicit;
-                yield return this.CreateContext(request, binding).Resolve();
-            }
-        }
-
-        private IEnumerable<object> Resolve(IRequest request, bool requestMissingBindings)
-        {
-            var resolveBindings = this.GetBindings(request.Service).Where(b => this.SatifiesRequest(request, b));
-            var resolveBindingsIterator = resolveBindings.GetEnumerator();
-
-            if (!resolveBindingsIterator.MoveNext())
-            {
-                return this.ResolveWithMissingBindings(request, requestMissingBindings);
-            }
-
             if (request.IsUnique)
             {
-                var first = resolveBindingsIterator.Current;
-                if (resolveBindingsIterator.MoveNext() &&
-                    this.bindingPrecedenceComparer.Compare(first, resolveBindingsIterator.Current) == 0)
+                return this.ResolveSingleUnique(request, handleMissingBindings);
+            }
+
+            return this.ResolveSingleNonUnique(request, handleMissingBindings);
+        }
+
+        private IEnumerable<object> ResolveAll(IRequest request, bool handleMissingBindings)
+        {
+            if (request.IsUnique)
+            {
+                var instance = this.ResolveSingleUnique(request, handleMissingBindings);
+                if (instance != null)
                 {
-                    if (request.IsOptional && !request.ForceUnique)
-                    {
-                        return Enumerable.Empty<object>();
-                    }
-
-                    var formattedBindings =
-                        from binding in resolveBindings
-                        let context = this.CreateContext(request, binding)
-                        select binding.Format(context);
-                    throw new ActivationException(ExceptionFormatter.CouldNotUniquelyResolveBinding(request, formattedBindings.ToArray()));
+                    yield return instance;
                 }
-
-                return new object[] { this.CreateContext(request, first).Resolve() };
             }
             else
             {
-                return this.ResolveMultiple(request);
+                foreach (var instance in this.ResolveAllNonUnique(request, handleMissingBindings))
+                {
+                    yield return instance;
+                }
             }
+        }
+
+        private object ResolveSingleUnique(IRequest request, bool handleMissingBindings)
+        {
+            var bindings = this.GetBindingsCore(request.Service);
+            IBinding satisfiedBinding = null;
+
+            for (var i = 0; i < bindings.Length; i++)
+            {
+                var binding = bindings[i];
+
+                if (!this.SatifiesRequest(request, binding))
+                {
+                    continue;
+                }
+
+                if (satisfiedBinding != null)
+                {
+                    if (this.bindingPrecedenceComparer.Compare(satisfiedBinding, binding) == 0)
+                    {
+                        if (request.IsOptional && !request.ForceUnique)
+                        {
+                            return null;
+                        }
+
+                        var formattedBindings = new List<string>
+                            {
+                                satisfiedBinding.Format(this.CreateContext(request, satisfiedBinding)),
+                                binding.Format(this.CreateContext(request, binding)),
+                            };
+
+                        for (i++; i < bindings.Length; i++)
+                        {
+                            if (!this.SatifiesRequest(request, bindings[i]))
+                            {
+                                continue;
+                            }
+
+                            formattedBindings.Add(bindings[i].Format(this.CreateContext(request, bindings[i])));
+                        }
+
+                        throw new ActivationException(ExceptionFormatter.CouldNotUniquelyResolveBinding(
+                            request,
+                            formattedBindings.ToArray()));
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                satisfiedBinding = binding;
+            }
+
+            if (satisfiedBinding != null)
+            {
+                return this.CreateContext(request, satisfiedBinding).Resolve();
+            }
+
+            var collection = this.ResolveCollection(request);
+            if (collection != null)
+            {
+                return collection;
+            }
+
+            if (handleMissingBindings && this.HandleMissingBinding(request))
+            {
+                return this.ResolveSingle(request, false);
+            }
+
+            if (request.IsOptional)
+            {
+                return null;
+            }
+
+            throw new ActivationException(this.exceptionFormatter.CouldNotResolveBinding(request));
+        }
+
+        private object ResolveCollection(IRequest request)
+        {
+            void UpdateRequest(Type service)
+            {
+                if (request.ParentRequest == null)
+                {
+                    request = this.CreateRequest(service, null, request.Parameters.GetShouldInheritParameters(), true, false);
+                }
+                else
+                {
+                    request = request.ParentRequest.CreateChild(service, request.ParentContext, request.Target);
+                    request.IsOptional = true;
+                }
+            }
+
+            if (request.Service.IsArray)
+            {
+                var service = request.Service.GetElementType();
+
+                UpdateRequest(service);
+
+                return this.ResolveAll(request, false).CastSlow(service).ToArraySlow(service);
+            }
+
+            if (request.Service.IsGenericType && !request.Service.IsGenericTypeDefinition)
+            {
+                var gtd = request.Service.GetGenericTypeDefinition();
+
+                if (gtd == typeof(List<>) || gtd == typeof(IList<>) || gtd == typeof(ICollection<>))
+                {
+                    var service = request.Service.GenericTypeArguments[0];
+
+                    UpdateRequest(service);
+
+                    return this.ResolveAll(request, false).CastSlow(service).ToListSlow(service);
+                }
+
+                if (gtd == typeof(IEnumerable<>))
+                {
+                    var service = request.Service.GenericTypeArguments[0];
+
+                    UpdateRequest(service);
+
+                    return this.ResolveAll(request, false).CastSlow(service);
+                }
+            }
+
+            return null;
+        }
+
+        private IEnumerable<object> ResolveAllNonUnique(IRequest request, bool handleMissingBindings)
+        {
+            var satisfiedBindings = this.GetBindingsCore(request.Service)
+                                        .Where(b => this.SatifiesRequest(request, b));
+
+            using (var satisfiedBindingEnumerator = satisfiedBindings.GetEnumerator())
+            {
+                if (!satisfiedBindingEnumerator.MoveNext())
+                {
+                    foreach (var instance in this.ResolveAllWithMissingBindings(request, handleMissingBindings))
+                    {
+                        yield return instance;
+                    }
+                }
+            }
+
+            if (!handleMissingBindings || satisfiedBindings.Any(binding => !binding.IsImplicit))
+            {
+                satisfiedBindings = satisfiedBindings.Where(binding => !binding.IsImplicit);
+            }
+
+            foreach (var satisfiedBinding in satisfiedBindings)
+            {
+                yield return this.CreateContext(request, satisfiedBinding).Resolve();
+            }
+        }
+
+        private object ResolveSingleNonUnique(IRequest request, bool handleMissingBindings)
+        {
+            var bindings = this.GetBindingsCore(request.Service);
+            IBinding satisfiedBinding = null;
+
+            foreach (var binding in bindings)
+            {
+                if (!this.SatifiesRequest(request, binding))
+                {
+                    continue;
+                }
+
+                // Always prefer the first non-implicit binding that satisfies the request.
+                if (!binding.IsImplicit)
+                {
+                    satisfiedBinding = binding;
+                    break;
+                }
+
+                satisfiedBinding = binding;
+            }
+
+            if (satisfiedBinding != null)
+            {
+                return this.CreateContext(request, satisfiedBinding).Resolve();
+            }
+
+            var collection = this.ResolveCollection(request);
+            if (collection != null)
+            {
+                return collection;
+            }
+
+            /*
+            / We end up here if there are no bindings for the service, or if there's no binding that satisfies
+            / the request.
+            */
+
+            if (handleMissingBindings && this.HandleMissingBinding(request))
+            {
+                return this.ResolveSingle(request, false);
+            }
+
+            if (request.IsOptional)
+            {
+                return null;
+            }
+
+            throw new ActivationException(this.exceptionFormatter.CouldNotResolveBinding(request));
         }
 
         private List<IBinding> GetBindingsFromFirstResolverThatReturnsAtLeastOneBinding(IRequest request)
         {
             return this.missingBindingResolvers
-                .Select(c => c.Resolve(this.bindings, request).ToList())
-                .FirstOrDefault(b => b.Any());
+                       .Select(c => c.Resolve(this.bindings, request).ToList())
+                       .FirstOrDefault(b => b.Any());
         }
 
-        private void AddReadonlyKernelBinding<T>(T readonlyKernel, Multimap<Type, IBinding> bindings)
+        private void AddReadOnlyKernelBinding<T>(T readonlyKernel, Dictionary<Type, ICollection<IBinding>> bindings)
         {
             var binding = new Binding(typeof(T));
-            new BindingBuilder<T>(binding, this.Settings, typeof(T).Format()).ToConstant(readonlyKernel);
-            bindings.Add(typeof(T), binding);
+            new BindingBuilder<T>(binding, this.planner, this.constructorScorer, typeof(T).Format()).ToConstant(readonlyKernel);
+            bindings[typeof(T)] = new[] { binding };
         }
 
-        private void InitializeBindings(ISelector selector)
+        private IBinding[] GetBindingsCore(Type service)
         {
-            foreach (var binding in this.bindings.Values.SelectMany(b => b))
+            if (this.bindingCache.TryGetValue(service, out IBinding[] result))
             {
-                binding.InitializeProviderCallback(selector);
-                this.GetBindings(binding.Service);
+                return result;
+            }
+
+            result = this.CreateBindings(service);
+            if (result.Length > 0)
+            {
+                var newBindingCache = new Dictionary<Type, IBinding[]>(this.bindingCache, new ReferenceEqualityTypeComparer());
+                newBindingCache[service] = result;
+                this.bindingCache = newBindingCache;
+            }
+
+            return result;
+        }
+
+        private IBinding[] CreateBindings(Type service)
+        {
+            var bindingList = new List<IBinding>();
+            foreach (var bindingResolver in this.bindingResolvers)
+            {
+                var bindings = bindingResolver.Resolve(this.bindings, service);
+                if (bindings.Count > 0)
+                {
+                    bindingList.AddRange(bindings);
+                }
+            }
+
+            var bindingCount = bindingList.Count;
+            if (bindingCount == 0)
+            {
+                return Array.Empty<IBinding>();
+            }
+            else if (bindingCount == 1)
+            {
+                return new[] { bindingList[0] };
+            }
+            else
+            {
+                var bindingArray = bindingList.ToArray();
+                Array.Sort(bindingArray, new ReverseComparer<IBinding>(this.bindingPrecedenceComparer));
+                return bindingArray;
             }
         }
     }

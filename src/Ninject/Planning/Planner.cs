@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="Planner.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,7 +17,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning
 {
@@ -27,8 +25,9 @@ namespace Ninject.Planning
     using System.Collections.Generic;
     using System.Linq;
     using System.Threading;
+
     using Ninject.Components;
-    using Ninject.Infrastructure.Language;
+    using Ninject.Infrastructure;
     using Ninject.Planning.Strategies;
 
     /// <summary>
@@ -37,36 +36,51 @@ namespace Ninject.Planning
     public class Planner : NinjectComponent, IPlanner
     {
         private readonly ReaderWriterLockSlim plannerLock = new ReaderWriterLockSlim();
-
-        private readonly Dictionary<Type, IPlan> plans = new Dictionary<Type, IPlan>();
+        private readonly Dictionary<Type, IPlan> plans = new Dictionary<Type, IPlan>(new ReferenceEqualityTypeComparer());
+        private readonly List<IPlanningStrategy> strategies;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Planner"/> class.
         /// </summary>
         /// <param name="strategies">The strategies to execute during planning.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="strategies"/> is <see langword="null"/>.</exception>
         public Planner(IEnumerable<IPlanningStrategy> strategies)
         {
-            this.Strategies = strategies.ToList();
+            Ensure.ArgumentNotNull(strategies, nameof(strategies));
+
+            this.strategies = strategies.ToList();
         }
 
         /// <summary>
         /// Gets the strategies that contribute to the planning process.
         /// </summary>
-        public IList<IPlanningStrategy> Strategies { get; private set; }
+        public IList<IPlanningStrategy> Strategies
+        {
+            get { return this.strategies; }
+        }
 
         /// <summary>
         /// Gets or creates an activation plan for the specified type.
         /// </summary>
         /// <param name="type">The type for which a plan should be created.</param>
-        /// <returns>The type's activation plan.</returns>
+        /// <returns>
+        /// The type's activation plan.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
         public IPlan GetPlan(Type type)
         {
+            Ensure.ArgumentNotNull(type, nameof(type));
+
             this.plannerLock.EnterUpgradeableReadLock();
 
             try
             {
-                IPlan plan;
-                return this.plans.TryGetValue(type, out plan) ? plan : this.CreateNewPlan(type);
+                if (this.plans.TryGetValue(type, out IPlan plan))
+                {
+                    return plan;
+                }
+
+                return this.CreateNewPlan(type);
             }
             finally
             {
@@ -78,7 +92,10 @@ namespace Ninject.Planning
         /// Creates an empty plan for the specified type.
         /// </summary>
         /// <param name="type">The type for which a plan should be created.</param>
-        /// <returns>The created plan.</returns>
+        /// <returns>
+        /// The created plan.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
         protected virtual IPlan CreateEmptyPlan(Type type)
         {
             return new Plan(type);
@@ -86,32 +103,41 @@ namespace Ninject.Planning
 
         /// <summary>
         /// Creates a new plan for the specified type.
-        /// This method requires an active reader lock!
         /// </summary>
         /// <param name="type">The type.</param>
-        /// <returns>The newly created plan.</returns>
+        /// <remarks>
+        /// This method requires an active write lock.
+        /// </remarks>
+        /// <returns>
+        /// The newly created plan.
+        /// </returns>
         private IPlan CreateNewPlan(Type type)
         {
             this.plannerLock.EnterWriteLock();
 
+            IPlan newPlan;
+
             try
             {
-                IPlan plan;
-                if (this.plans.TryGetValue(type, out plan))
+                // Ensure another thread hasn't already created plan for the type
+                // right before we obtained the write lock.
+                if (this.plans.TryGetValue(type, out IPlan plan))
                 {
                     return plan;
                 }
 
-                plan = this.CreateEmptyPlan(type);
-                this.plans.Add(type, plan);
-                this.Strategies.Map(s => s.Execute(plan));
-
-                return plan;
+                newPlan = this.CreateEmptyPlan(type);
+                this.plans.Add(type, newPlan);
             }
             finally
             {
                 this.plannerLock.ExitWriteLock();
             }
+
+            // Execute strategies outside of write lock to ensure we're not
+            // blocking threads that want to create plans for other types.
+            this.strategies.ForEach(s => s.Execute(newPlan));
+            return newPlan;
         }
     }
 }

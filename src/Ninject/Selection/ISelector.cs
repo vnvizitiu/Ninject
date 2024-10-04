@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="ISelector.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,15 +17,15 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Selection
 {
     using System;
     using System.Collections.Generic;
     using System.Reflection;
+
     using Ninject.Components;
-    using Ninject.Selection.Heuristics;
 
     /// <summary>
     /// Selects members for injection.
@@ -35,34 +33,33 @@ namespace Ninject.Selection
     public interface ISelector : INinjectComponent
     {
         /// <summary>
-        /// Gets or sets the constructor scorer.
-        /// </summary>
-        IConstructorScorer ConstructorScorer { get; set; }
-
-        /// <summary>
-        /// Gets the heuristics used to determine which members should be injected.
-        /// </summary>
-        ICollection<IInjectionHeuristic> InjectionHeuristics { get; }
-
-        /// <summary>
-        /// Selects the constructor to call on the specified type, by using the constructor scorer.
+        /// Selects the constructors that could be injected.
         /// </summary>
         /// <param name="type">The type.</param>
-        /// <returns>The selected constructor, or <see langword="null"/> if none were available.</returns>
-        IEnumerable<ConstructorInfo> SelectConstructorsForInjection(Type type);
+        /// <returns>
+        /// A series of the selected constructor.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
+        ConstructorInfo[] SelectConstructorsForInjection(Type type);
 
         /// <summary>
         /// Selects properties that should be injected.
         /// </summary>
         /// <param name="type">The type.</param>
-        /// <returns>A series of the selected properties.</returns>
+        /// <returns>
+        /// A series of the selected properties.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
         IEnumerable<PropertyInfo> SelectPropertiesForInjection(Type type);
 
         /// <summary>
         /// Selects methods that should be injected.
         /// </summary>
         /// <param name="type">The type.</param>
-        /// <returns>A series of the selected methods.</returns>
+        /// <returns>
+        /// A series of the selected methods.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="type"/> is <see langword="null"/>.</exception>
         IEnumerable<MethodInfo> SelectMethodsForInjection(Type type);
     }
 }

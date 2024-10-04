@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="Target.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,7 +17,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Targets
 {
@@ -27,9 +25,10 @@ namespace Ninject.Planning.Targets
     using System.Collections.Generic;
     using System.Linq;
     using System.Reflection;
+
     using Ninject.Activation;
+    using Ninject.Components;
     using Ninject.Infrastructure;
-    using Ninject.Infrastructure.Introspection;
     using Ninject.Infrastructure.Language;
     using Ninject.Planning.Bindings;
 
@@ -38,11 +37,16 @@ namespace Ninject.Planning.Targets
     /// </summary>
     /// <typeparam name="T">The type of site this represents.</typeparam>
     public abstract class Target<T> : ITarget
-#if !NO_CUSTOM_ATTRIBUTE_PROVIDER
         where T : ICustomAttributeProvider
-#endif
     {
+        /// <summary>
+        /// The constraint of the target.
+        /// </summary>
         private readonly Lazy<Func<IBindingMetadata, bool>> constraint;
+
+        /// <summary>
+        /// The optional decision of the target.
+        /// </summary>
         private readonly Lazy<bool> isOptional;
 
         /// <summary>
@@ -50,8 +54,13 @@ namespace Ninject.Planning.Targets
         /// </summary>
         /// <param name="member">The member that contains the target.</param>
         /// <param name="site">The site represented by the target.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="member"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="site"/> is <see langword="null"/>.</exception>
         protected Target(MemberInfo member, T site)
         {
+            Ensure.ArgumentNotNull(member, nameof(member));
+            Ensure.ArgumentNotNull(site, nameof(site));
+
             this.Member = member;
             this.Site = site;
 
@@ -106,29 +115,35 @@ namespace Ninject.Planning.Targets
         /// <summary>
         /// Gets the default value for the target.
         /// </summary>
-        /// <exception cref="System.InvalidOperationException">If the item does not have a default value.</exception>
+        /// <exception cref="InvalidOperationException">The <see cref="Target{T}"/> does not have a default value.</exception>
         public virtual object DefaultValue
         {
             get { throw new InvalidOperationException(ExceptionFormatter.TargetDoesNotHaveADefaultValue(this)); }
         }
 
-#if !NO_CUSTOM_ATTRIBUTE_PROVIDER
         /// <summary>
         /// Returns an array of custom attributes of a specified type defined on the target.
         /// </summary>
         /// <param name="attributeType">The type of attribute to search for.</param>
         /// <param name="inherit">Whether to look up the hierarchy chain for inherited custom attributes.</param>
-        /// <returns>An array of custom attributes of the specified type.</returns>
+        /// <returns>
+        /// An array of custom attributes of the specified type.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="attributeType"/> is <see langword="null"/>.</exception>
         public object[] GetCustomAttributes(Type attributeType, bool inherit)
         {
-            return this.Site.GetCustomAttributesExtended(attributeType, inherit).ToArray();
+            Ensure.ArgumentNotNull(attributeType, nameof(attributeType));
+
+            return this.Site.GetCustomAttributesExtended(attributeType, inherit);
         }
 
         /// <summary>
         /// Returns an array of custom attributes defined on the target.
         /// </summary>
         /// <param name="inherit">Whether to look up the hierarchy chain for inherited custom attributes.</param>
-        /// <returns>An array of custom attributes.</returns>
+        /// <returns>
+        /// An array of custom attributes.
+        /// </returns>
         public object[] GetCustomAttributes(bool inherit)
         {
             return this.Site.GetCustomAttributes(inherit);
@@ -139,56 +154,32 @@ namespace Ninject.Planning.Targets
         /// </summary>
         /// <param name="attributeType">The type of attribute to search for.</param>
         /// <param name="inherit">Whether to look up the hierarchy chain for inherited custom attributes.</param>
-        /// <returns><c>True</c> if such an attribute is defined; otherwise <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if such an attribute is defined; otherwise, <see langword="false"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="attributeType"/> is <see langword="null"/>.</exception>
         public bool IsDefined(Type attributeType, bool inherit)
         {
-            return this.Site.IsDefined(attributeType, inherit);
-        }
-#else
-        /// <summary>
-        /// Determines if the target has the specified attribute.
-        /// </summary>
-        /// <param name="attributeType">The type of attribute</param>
-        /// <returns>
-        ///     <c>true</c> if the specified member has attribute; otherwise, <c>false</c>.
-        /// </returns>
-        public bool HasAttribute(Type attributeType)
-        {
+            Ensure.ArgumentNotNull(attributeType, nameof(attributeType));
+
             return this.Site.HasAttribute(attributeType);
         }
-#endif
 
         /// <summary>
         /// Resolves a value for the target within the specified parent context.
         /// </summary>
         /// <param name="parent">The parent context.</param>
-        /// <returns>The resolved value.</returns>
+        /// <returns>
+        /// The resolved value.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="parent"/> is <see langword="null"/>.</exception>
         public object ResolveWithin(IContext parent)
         {
-            if (this.Type.IsArray)
-            {
-                var service = this.Type.GetElementType();
-                return this.GetValues(service, parent).CastSlow(service).ToArraySlow(service);
-            }
+            Ensure.ArgumentNotNull(parent, nameof(parent));
 
-            if (this.Type.GetTypeInfo().IsGenericType)
-            {
-                var gtd = this.Type.GetGenericTypeDefinition();
-
-                var service = this.Type.GenericTypeArguments[0];
-
-                if (gtd == typeof(List<>) || gtd == typeof(IList<>) || gtd == typeof(ICollection<>))
-                {
-                    return this.GetValues(service, parent).CastSlow(service).ToListSlow(service);
-                }
-
-                if (gtd == typeof(IEnumerable<>))
-                {
-                    return this.GetValues(service, parent).CastSlow(service);
-                }
-            }
-
-            return this.GetValue(this.Type, parent);
+            var request = parent.Request.CreateChild(this.Type, parent, this);
+            request.IsUnique = true;
+            return parent.Kernel.ResolveSingle(request);
         }
 
         /// <summary>
@@ -196,9 +187,17 @@ namespace Ninject.Planning.Targets
         /// </summary>
         /// <param name="service">The service that the target is requesting.</param>
         /// <param name="parent">The parent context in which the target is being injected.</param>
-        /// <returns>A series of values that are available for injection.</returns>
+        /// <returns>
+        /// A series of values that are available for injection.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="parent"/> is <see langword="null"/>.</exception>
+        [Obsolete]
         protected virtual IEnumerable<object> GetValues(Type service, IContext parent)
         {
+            Ensure.ArgumentNotNull(service, nameof(service));
+            Ensure.ArgumentNotNull(parent, nameof(parent));
+
             var request = parent.Request.CreateChild(service, parent, this);
             request.IsOptional = true;
             return parent.Kernel.Resolve(request);
@@ -209,18 +208,28 @@ namespace Ninject.Planning.Targets
         /// </summary>
         /// <param name="service">The service that the target is requesting.</param>
         /// <param name="parent">The parent context in which the target is being injected.</param>
-        /// <returns>The value that is to be injected.</returns>
+        /// <returns>
+        /// The value that is to be injected.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="parent"/> is <see langword="null"/>.</exception>
+        [Obsolete]
         protected virtual object GetValue(Type service, IContext parent)
         {
+            Ensure.ArgumentNotNull(service, nameof(service));
+            Ensure.ArgumentNotNull(parent, nameof(parent));
+
             var request = parent.Request.CreateChild(service, parent, this);
             request.IsUnique = true;
-            return parent.Kernel.Resolve(request).SingleOrDefault();
+            return parent.Kernel.ResolveSingle(request);
         }
 
         /// <summary>
         /// Reads whether the target represents an optional dependency.
         /// </summary>
-        /// <returns><see langword="True"/> if it is optional; otherwise <see langword="false"/>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if it is optional; otherwise, <see langword="false"/>.
+        /// </returns>
         protected virtual bool ReadOptionalFromTarget()
         {
             return this.Site.HasAttribute(typeof(OptionalAttribute));
@@ -229,22 +238,38 @@ namespace Ninject.Planning.Targets
         /// <summary>
         /// Reads the resolution constraint from target.
         /// </summary>
-        /// <returns>The resolution constraint.</returns>
+        /// <returns>
+        /// The resolution constraint.
+        /// </returns>
         protected virtual Func<IBindingMetadata, bool> ReadConstraintFromTarget()
         {
-            var attributes = this.Site.GetCustomAttributesExtended(typeof(ConstraintAttribute), true).Cast<ConstraintAttribute>().ToList();
-
-            if (attributes == null || attributes.Count == 0)
+            if (!(this.GetCustomAttributes(typeof(ConstraintAttribute), true) is ConstraintAttribute[] attributes) || attributes.Length == 0)
             {
                 return null;
             }
 
-            if (attributes.Count == 1)
+            if (attributes.Length == 1)
             {
                 return attributes[0].Matches;
             }
 
-            return metadata => attributes.All(attribute => attribute.Matches(metadata));
+            return metadata => AllConstraintAttributesMatch(attributes, metadata);
+        }
+
+        private static bool AllConstraintAttributesMatch(ConstraintAttribute[] attributes, IBindingMetadata metadata)
+        {
+            var matches = true;
+
+            for (var i = 0; i < attributes.Length; i++)
+            {
+                if (!attributes[i].Matches(metadata))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            return matches;
         }
     }
 }

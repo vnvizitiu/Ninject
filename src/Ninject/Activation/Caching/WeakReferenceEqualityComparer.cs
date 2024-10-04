@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="WeakReferenceEqualityComparer.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,16 +17,17 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation.Caching
 {
     using System.Collections.Generic;
     using System.Runtime.CompilerServices;
+
     using Ninject.Infrastructure;
 
     /// <summary>
-    /// Compares ReferenceEqualWeakReferences to objects
+    /// Compares ReferenceEqualWeakReferences to objects.
     /// </summary>
     public class WeakReferenceEqualityComparer : IEqualityComparer<object>
     {
@@ -37,7 +36,9 @@ namespace Ninject.Activation.Caching
         /// </summary>
         /// <param name="x">The first object.</param>
         /// <param name="y">The second object.</param>
-        /// <returns>True if the objects are equal; otherwise false</returns>
+        /// <returns>
+        /// <see langword="true"/> if the objects are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public new bool Equals(object x, object y)
         {
             return x.Equals(y);
@@ -47,12 +48,12 @@ namespace Ninject.Activation.Caching
         /// Returns the hash code of the specified object.
         /// </summary>
         /// <param name="obj">The object for which the hash code is calculated.</param>
-        /// <returns>The hash code of the specified object.</returns>
+        /// <returns>
+        /// The hash code of the specified object.
+        /// </returns>
         public int GetHashCode(object obj)
         {
-            var weakReference = obj as ReferenceEqualWeakReference;
-            return weakReference != null ? weakReference.GetHashCode() :
-                RuntimeHelpers.GetHashCode(obj);
+            return obj is ReferenceEqualWeakReference weakReference ? weakReference.GetHashCode() : RuntimeHelpers.GetHashCode(obj);
         }
     }
 }

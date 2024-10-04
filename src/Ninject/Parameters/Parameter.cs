@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="Parameter.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,14 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Parameters
 {
     using System;
+
     using Ninject.Activation;
+    using Ninject.Infrastructure;
     using Ninject.Planning.Targets;
 
     /// <summary>
@@ -38,6 +38,7 @@ namespace Ninject.Parameters
         /// <param name="name">The name of the parameter.</param>
         /// <param name="value">The value of the parameter.</param>
         /// <param name="shouldInherit">Whether the parameter should be inherited into child requests.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
         public Parameter(string name, object value, bool shouldInherit)
             : this(name, (ctx, target) => value, shouldInherit)
         {
@@ -49,8 +50,13 @@ namespace Ninject.Parameters
         /// <param name="name">The name of the parameter.</param>
         /// <param name="valueCallback">The callback that will be triggered to get the parameter's value.</param>
         /// <param name="shouldInherit">Whether the parameter should be inherited into child requests.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="valueCallback"/> is <see langword="null"/>.</exception>
         public Parameter(string name, Func<IContext, object> valueCallback, bool shouldInherit)
         {
+            Ensure.ArgumentNotNullOrEmpty(name, nameof(name));
+            Ensure.ArgumentNotNull(valueCallback, nameof(valueCallback));
+
             this.Name = name;
             this.ValueCallback = (ctx, target) => valueCallback(ctx);
             this.ShouldInherit = shouldInherit;
@@ -62,8 +68,13 @@ namespace Ninject.Parameters
         /// <param name="name">The name of the parameter.</param>
         /// <param name="valueCallback">The callback that will be triggered to get the parameter's value.</param>
         /// <param name="shouldInherit">Whether the parameter should be inherited into child requests.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="valueCallback"/> is <see langword="null"/>.</exception>
         public Parameter(string name, Func<IContext, ITarget, object> valueCallback, bool shouldInherit)
         {
+            Ensure.ArgumentNotNullOrEmpty(name, nameof(name));
+            Ensure.ArgumentNotNull(valueCallback, nameof(valueCallback));
+
             this.Name = name;
             this.ValueCallback = valueCallback;
             this.ShouldInherit = shouldInherit;
@@ -89,9 +100,14 @@ namespace Ninject.Parameters
         /// </summary>
         /// <param name="context">The context.</param>
         /// <param name="target">The target.</param>
-        /// <returns>The value for the parameter.</returns>
+        /// <returns>
+        /// The value for the parameter.
+        /// </returns>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
         public object GetValue(IContext context, ITarget target)
         {
+            Ensure.ArgumentNotNull(context, nameof(context));
+
             return this.ValueCallback(context, target);
         }
 
@@ -99,11 +115,12 @@ namespace Ninject.Parameters
         /// Determines whether the object equals the specified object.
         /// </summary>
         /// <param name="obj">An object to compare with this object.</param>
-        /// <returns><c>True</c> if the objects are equal; otherwise <c>false</c></returns>
+        /// <returns>
+        /// <see langword="true"/> if the objects are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public override bool Equals(object obj)
         {
-            var parameter = obj as IParameter;
-            return parameter != null ? this.Equals(parameter) : base.Equals(obj);
+            return obj is IParameter parameter ? this.Equals(parameter) : base.Equals(obj);
         }
 
         /// <summary>
@@ -119,7 +136,9 @@ namespace Ninject.Parameters
         /// Indicates whether the current object is equal to another object of the same type.
         /// </summary>
         /// <param name="other">An object to compare with this object.</param>
-        /// <returns><c>True</c> if the objects are equal; otherwise <c>false</c></returns>
+        /// <returns>
+        /// <see langword="true"/> if the objects are equal; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Equals(IParameter other)
         {
             return other.GetType() == this.GetType() && other.Name.Equals(this.Name);

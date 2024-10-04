@@ -1,5 +1,4 @@
-﻿#if !NO_MOQ
-namespace Ninject.Tests.Unit.ComponentContainerTests
+﻿namespace Ninject.Tests.Unit.ComponentContainerTests
 {
     using System;
     using System.Collections.Generic;
@@ -8,12 +7,13 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
     using Moq;
     using Ninject.Components;
     using Ninject.Infrastructure.Disposal;
+    using Ninject.Infrastructure.Introspection;
     using Xunit;
 
     public class ComponentContainerContext
     {
         protected ComponentContainer container;
-        protected Mock<IKernelConfiguration> kernelConfigurationMock;
+        protected Mock<IKernel> kernelMock;
 
         public ComponentContainerContext()
         {
@@ -23,10 +23,60 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         public void SetUp()
         {
             this.container = new ComponentContainer();
-            this.kernelConfigurationMock = new Mock<IKernelConfiguration>();
-            this.kernelConfigurationMock.SetupGet(c => c.Settings).Returns(new NinjectSettings());
+            this.kernelMock = new Mock<IKernel>();
 
-            this.container.KernelConfiguration = this.kernelConfigurationMock.Object;
+            this.container.KernelConfiguration = this.kernelMock.Object;
+        }
+    }
+
+    public class WhenInstanceIsCreated
+    {
+        private Mock<INinjectSettings> _settingsMock;
+        private Mock<IExceptionFormatter> _exceptionFormatterMock;
+
+        public WhenInstanceIsCreated()
+        {
+            _settingsMock = new Mock<INinjectSettings>(MockBehavior.Strict);
+            _exceptionFormatterMock = new Mock<IExceptionFormatter>();
+        }
+
+        [Fact]
+        public void DefaultConstructor()
+        {
+            var container = new ComponentContainer();
+
+            var exceptionFormatter = container.Get<IExceptionFormatter>();
+
+            Assert.NotNull(exceptionFormatter);
+            Assert.Same(exceptionFormatter, container.Get<IExceptionFormatter>());
+        }
+
+        [Fact]
+        public void Constructor_Settings()
+        {
+            var container = new ComponentContainer(_settingsMock.Object);
+
+            var exceptionFormatter = container.Get<IExceptionFormatter>();
+
+            Assert.NotNull(exceptionFormatter);
+            Assert.Same(exceptionFormatter, container.Get<IExceptionFormatter>());
+        }
+
+        [Fact]
+        public void Constructor_SettingsAndExceptionFormatter()
+        {
+            var container = new ComponentContainer(_settingsMock.Object, _exceptionFormatterMock.Object);
+
+            var exceptionFormatter = container.Get<IExceptionFormatter>();
+            var settings = container.Get(typeof(INinjectSettings));
+
+            Assert.NotNull(exceptionFormatter);
+            Assert.Same(_exceptionFormatterMock.Object, exceptionFormatter);
+            Assert.Same(exceptionFormatter, container.Get<IExceptionFormatter>());
+
+            Assert.NotNull(settings);
+            Assert.Same(_settingsMock.Object, settings);
+            Assert.Same(settings, container.Get(typeof(INinjectSettings)));
         }
     }
 
@@ -35,15 +85,15 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void ThrowsExceptionIfNoImplementationRegisteredForService()
         {
-            Assert.Throws<InvalidOperationException>(() => container.Get<ITestService>());
+            Assert.Throws<InvalidOperationException>(() => this.container.Get<ITestService>());
         }
 
         [Fact]
         public void ReturnsInstanceWhenOneImplementationIsRegistered()
         {
-            container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceA>();
 
-            var service = container.Get<ITestService>();
+            var service = this.container.Get<ITestService>();
 
             service.Should().NotBeNull();
             service.Should().BeOfType<TestServiceA>();
@@ -52,10 +102,10 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void ReturnsInstanceOfFirstRegisteredImplementation()
         {
-            container.Add<ITestService, TestServiceA>();
-            container.Add<ITestService, TestServiceB>();
+            this.container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceB>();
 
-            var service = container.Get<ITestService>();
+            var service = this.container.Get<ITestService>();
 
             service.Should().NotBeNull();
             service.Should().BeOfType<TestServiceA>();
@@ -64,11 +114,11 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void InjectsEnumeratorOfServicesWhenConstructorArgumentIsIEnumerable()
         {
-            container.Add<ITestService, TestServiceA>();
-            container.Add<ITestService, TestServiceB>();
-            container.Add<IAsksForEnumerable, AsksForEnumerable>();
+            this.container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceB>();
+            this.container.Add<IAsksForEnumerable, AsksForEnumerable>();
 
-            var asks = container.Get<IAsksForEnumerable>();
+            var asks = this.container.Get<IAsksForEnumerable>();
 
             asks.Should().NotBeNull();
             asks.SecondService.Should().NotBeNull();
@@ -78,10 +128,10 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void SameInstanceIsReturnedByDefault()
         {
-            container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceA>();
 
-            var service1 = container.Get<ITestService>();
-            var service2 = container.Get<ITestService>();
+            var service1 = this.container.Get<ITestService>();
+            var service2 = this.container.Get<ITestService>();
 
             service1.Should().BeSameAs(service2);
         }
@@ -89,10 +139,10 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void DifferentInstanceAreReturnedForTransients()
         {
-            container.AddTransient<ITestService, TestServiceA>();
+            this.container.AddTransient<ITestService, TestServiceA>();
 
-            var service1 = container.Get<ITestService>();
-            var service2 = container.Get<ITestService>();
+            var service1 = this.container.Get<ITestService>();
+            var service2 = this.container.Get<ITestService>();
 
             service1.Should().NotBeSameAs(service2);
         }
@@ -103,9 +153,9 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void ReturnsSeriesWithSingleItem()
         {
-            container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceA>();
 
-            var services = container.GetAll<ITestService>().ToList();
+            var services = this.container.GetAll<ITestService>().ToList();
 
             services.Should().NotBeNull();
             services.Count.Should().Be(1);
@@ -115,9 +165,9 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void ReturnsInstanceOfEachRegisteredImplementation()
         {
-            container.Add<ITestService, TestServiceA>();
-            container.Add<ITestService, TestServiceB>();
-            var services = container.GetAll<ITestService>().ToList();
+            this.container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceB>();
+            var services = this.container.GetAll<ITestService>().ToList();
 
             services.Should().NotBeNull();
             services.Count.Should().Be(2);
@@ -128,10 +178,10 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void ReturnsSameInstanceForTwoCallsForSameService()
         {
-            container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceA>();
 
-            var service1 = container.Get<ITestService>();
-            var service2 = container.Get<ITestService>();
+            var service1 = this.container.Get<ITestService>();
+            var service2 = this.container.Get<ITestService>();
 
             service1.Should().NotBeNull();
             service2.Should().NotBeNull();
@@ -144,26 +194,26 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
         [Fact]
         public void RemovesAllMappings()
         {
-            container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceA>();
 
-            var service1 = container.Get<ITestService>();
+            var service1 = this.container.Get<ITestService>();
             service1.Should().NotBeNull();
 
-            container.RemoveAll<ITestService>();
-            Assert.Throws<InvalidOperationException>(() => container.Get<ITestService>());
+            this.container.RemoveAll<ITestService>();
+            Assert.Throws<InvalidOperationException>(() => this.container.Get<ITestService>());
         }
 
         [Fact]
         public void DisposesOfAllInstances()
         {
-            container.Add<ITestService, TestServiceA>();
-            container.Add<ITestService, TestServiceB>();
+            this.container.Add<ITestService, TestServiceA>();
+            this.container.Add<ITestService, TestServiceB>();
 
-            var services = container.GetAll<ITestService>().ToList();
+            var services = this.container.GetAll<ITestService>().ToList();
             services.Should().NotBeNull();
             services.Count.Should().Be(2);
 
-            container.RemoveAll<ITestService>();
+            this.container.RemoveAll<ITestService>();
 
             services[0].IsDisposed.Should().BeTrue();
             services[1].IsDisposed.Should().BeTrue();
@@ -176,7 +226,7 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
 
         public AsksForEnumerable(IEnumerable<ITestService> services)
         {
-            SecondService = services.Skip(1).First();
+            this.SecondService = services.Skip(1).First();
         }
     }
 
@@ -190,4 +240,3 @@ namespace Ninject.Tests.Unit.ComponentContainerTests
 
     public interface ITestService : INinjectComponent, IDisposableObject { }
 }
-#endif

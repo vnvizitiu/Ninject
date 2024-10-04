@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="ExtensionsForMemberInfo.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,66 +17,94 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Infrastructure.Language
 {
     using System;
-    using System.Collections.Generic;
-    using System.Linq;
     using System.Reflection;
 
     /// <summary>
-    /// Extensions for MemberInfo
+    /// Provides extension methods for <see cref="MemberInfo"/>.
     /// </summary>
     public static class ExtensionsForMemberInfo
     {
         /// <summary>
         /// Determines whether the specified member has attribute.
         /// </summary>
-        /// <typeparam name="T">The type of the attribute.</typeparam>
-        /// <param name="member">The member.</param>
-        /// <returns>
-        ///     <c>true</c> if the specified member has attribute; otherwise, <c>false</c>.
-        /// </returns>
-        public static bool HasAttribute<T>(this MemberInfo member)
-        {
-            return member.HasAttribute(typeof(T));
-        }
-
-        /// <summary>
-        /// Determines whether the specified member has attribute.
-        /// </summary>
         /// <param name="member">The member.</param>
         /// <param name="type">The type of the attribute.</param>
         /// <returns>
-        ///     <c>true</c> if the specified member has attribute; otherwise, <c>false</c>.
+        /// <see langword="true"/> if the specified member has attribute; otherwise, <see langword="false"/>.
         /// </returns>
         public static bool HasAttribute(this MemberInfo member, Type type)
         {
-            var propertyInfo = member as PropertyInfo;
-            if (propertyInfo != null)
+            if (member is PropertyInfo propertyInfo)
             {
-                return IsDefined(propertyInfo, type, true);
+                return Attribute.IsDefined(propertyInfo, type, true);
             }
 
             return member.IsDefined(type, true);
         }
 
         /// <summary>
-        /// Gets the property info from its declared tpe.
+        /// Determines whether the specified constructor has attribute.
+        /// </summary>
+        /// <param name="constructor">The constructor.</param>
+        /// <param name="type">The type of the attribute.</param>
+        /// <returns>
+        /// <see langword="true"/> if the specified constructor has attribute; otherwise, <see langword="false"/>.
+        /// </returns>
+        public static bool HasAttribute(this ConstructorInfo constructor, Type type)
+        {
+            return constructor.IsDefined(type, true);
+        }
+
+        /// <summary>
+        /// Determines whether the specified property has attribute.
+        /// </summary>
+        /// <param name="property">The property.</param>
+        /// <param name="type">The type of the attribute.</param>
+        /// <returns>
+        /// <see langword="true"/> if the specified property has attribute; otherwise, <see langword="false"/>.
+        /// </returns>
+        public static bool HasAttribute(this PropertyInfo property, Type type)
+        {
+            // https://docs.microsoft.com/en-us/dotnet/api/system.reflection.memberinfo.isdefined?view=netframework-4.7.2#remarks
+            return Attribute.IsDefined(property, type, true);
+        }
+
+        /// <summary>
+        /// Determines whether the specified method has attribute.
+        /// </summary>
+        /// <param name="method">The method.</param>
+        /// <param name="type">The type of the attribute.</param>
+        /// <returns>
+        /// <see langword="true"/> if the specified method has attribute; otherwise, <see langword="false"/>.
+        /// </returns>
+        public static bool HasAttribute(this MethodInfo method, Type type)
+        {
+            return method.IsDefined(type, true);
+        }
+
+        /// <summary>
+        /// Gets the property info from its declared type.
         /// </summary>
         /// <param name="memberInfo">The member info.</param>
         /// <param name="propertyDefinition">The property definition.</param>
-        /// <returns>The property info from the declared type of the property.</returns>
-        public static PropertyInfo GetPropertyFromDeclaredType(this MemberInfo memberInfo, PropertyInfo propertyDefinition)
+        /// <param name="flags">The flags.</param>
+        /// <returns>
+        /// The property info from the declared type of the property.
+        /// </returns>
+        public static PropertyInfo GetPropertyFromDeclaredType(this MemberInfo memberInfo, PropertyInfo propertyDefinition, BindingFlags flags)
         {
-            return memberInfo.DeclaringType.GetRuntimeProperties().FirstOrDefault(
-                p => p.Name == propertyDefinition.Name &&
-                    !p.GetMethod.IsStatic &&
-                     p.PropertyType == propertyDefinition.PropertyType &&
-                     p.GetIndexParameters().Select(pi => pi.ParameterType).SequenceEqual(
-                         propertyDefinition.GetIndexParameters().Select(pi => pi.ParameterType)));
+            return memberInfo.DeclaringType.GetProperty(
+                propertyDefinition.Name,
+                flags,
+                null,
+                propertyDefinition.PropertyType,
+                GetIndexParameterTypes(propertyDefinition),
+                null);
         }
 
         /// <summary>
@@ -86,13 +112,12 @@ namespace Ninject.Infrastructure.Language
         /// </summary>
         /// <param name="propertyInfo">The property info.</param>
         /// <returns>
-        ///     <c>true</c> if the specified property info is private; otherwise, <c>false</c>.
+        /// <see langword="true"/> if the specified property info is private; otherwise, <see langword="false"/>.
         /// </returns>
         public static bool IsPrivate(this PropertyInfo propertyInfo)
         {
-            var getMethod = propertyInfo.GetMethod;
-            var setMethod = propertyInfo.SetMethod;
-
+            var getMethod = propertyInfo.GetGetMethod(true);
+            var setMethod = propertyInfo.GetSetMethod(true);
             return (getMethod == null || getMethod.IsPrivate) && (setMethod == null || setMethod.IsPrivate);
         }
 
@@ -102,128 +127,36 @@ namespace Ninject.Infrastructure.Language
         /// </summary>
         /// <param name="member">The member.</param>
         /// <param name="attributeType">Type of the attribute.</param>
-        /// <param name="inherited">if set to <c>true</c> [inherited].</param>
-        /// <returns>The custom attributes.</returns>
-        public static IEnumerable<Attribute> GetCustomAttributesExtended(this MemberInfo member, Type attributeType, bool inherited)
+        /// <param name="inherited">if set to <see langword="true"/> [inherited].</param>
+        /// <returns>
+        /// The custom attributes.
+        /// </returns>
+        public static object[] GetCustomAttributesExtended(this MemberInfo member, Type attributeType, bool inherited)
         {
-#if !CORE
-            return Attribute.GetCustomAttributes(member, attributeType, inherited);
-#else
-            var propertyInfo = member as PropertyInfo;
-            if (propertyInfo != null)
+            if (member is PropertyInfo propertyInfo)
             {
-                return GetCustomAttributes(propertyInfo, attributeType, inherited);
+                return Attribute.GetCustomAttributes(propertyInfo, attributeType, inherited);
             }
 
-            return member.GetCustomAttributes(attributeType, inherited).Cast<Attribute>();
-#endif
+            return member.GetCustomAttributes(attributeType, inherited);
         }
 
-        private static PropertyInfo GetParentDefinition(PropertyInfo property)
+        private static Type[] GetIndexParameterTypes(PropertyInfo property)
         {
-            var propertyMethod = property.GetMethod ?? property.SetMethod;
-
-            if (propertyMethod != null)
+            var indexParameters = property.GetIndexParameters();
+            if (indexParameters.Length == 0)
             {
-                propertyMethod = propertyMethod.GetParentDefinition();
-                if (propertyMethod != null)
-                {
-                    return propertyMethod.GetPropertyFromDeclaredType(property);
-                }
+                return Array.Empty<Type>();
             }
 
-            return null;
-        }
+            var types = new Type[indexParameters.Length];
 
-        private static MethodInfo GetParentDefinition(this MethodInfo method)
-        {
-            var baseDefinition = method.GetRuntimeBaseDefinition();
-
-            var type = method.DeclaringType.GetTypeInfo().BaseType;
-
-            MethodInfo result = null;
-            while (result == null && type != null)
+            for (var i = 0; i < indexParameters.Length; i++)
             {
-                result = type.GetRuntimeMethods().SingleOrDefault(m => !m.IsStatic && m.GetRuntimeBaseDefinition().Equals(baseDefinition));
-                type = type.GetTypeInfo().BaseType;
+                types[i] = indexParameters[i].ParameterType;
             }
 
-            return result;
-        }
-
-        private static bool IsDefined(PropertyInfo element, Type attributeType, bool inherit)
-        {
-            if (element.IsDefined(attributeType, false))
-            {
-                return true;
-            }
-
-            if (inherit)
-            {
-                if (!InternalGetAttributeUsage(attributeType).Inherited)
-                {
-                    return false;
-                }
-
-                for (var info = GetParentDefinition(element);
-                     info != null;
-                     info = GetParentDefinition(info))
-                {
-                    if (info.IsDefined(attributeType, false))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
-
-        private static IEnumerable<Attribute> GetCustomAttributes(PropertyInfo propertyInfo, Type attributeType, bool inherit)
-        {
-            if (inherit)
-            {
-                if (InternalGetAttributeUsage(attributeType).Inherited)
-                {
-                    var attributes = new List<Attribute>();
-
-                    var attributeUsages = new Dictionary<Type, bool>();
-                    attributes.AddRange(propertyInfo.GetCustomAttributes(attributeType, false).Cast<Attribute>());
-                    for (var info = GetParentDefinition(propertyInfo);
-                         info != null;
-                         info = GetParentDefinition(info))
-                    {
-                        var customAttributes = info.GetCustomAttributes(attributeType, false).Cast<Attribute>();
-                        AddAttributes(attributes, customAttributes, attributeUsages);
-                    }
-
-                    return attributes;
-                }
-            }
-
-            return propertyInfo.GetCustomAttributes(attributeType, inherit).Cast<Attribute>();
-        }
-
-        private static void AddAttributes(List<Attribute> attributes, IEnumerable<Attribute> customAttributes, Dictionary<Type, bool> attributeUsages)
-        {
-            foreach (var attribute in customAttributes)
-            {
-                var type = attribute.GetType();
-                if (!attributeUsages.ContainsKey(type))
-                {
-                    attributeUsages[type] = InternalGetAttributeUsage(type).Inherited;
-                }
-
-                if (attributeUsages[type])
-                {
-                    attributes.Add(attribute);
-                }
-            }
-        }
-
-        private static AttributeUsageAttribute InternalGetAttributeUsage(Type type)
-        {
-            return type.GetTypeInfo().GetCustomAttribute<AttributeUsageAttribute>(true);
+            return types;
         }
     }
 }

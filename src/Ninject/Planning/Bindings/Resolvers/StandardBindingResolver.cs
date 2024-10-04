@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="StandardBindingResolver.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,14 +17,15 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Bindings.Resolvers
 {
     using System;
     using System.Collections.Generic;
-    using System.Linq;
+
     using Ninject.Components;
+    using Ninject.Infrastructure;
 
     /// <summary>
     /// Resolves bindings that have been registered directly for the service.
@@ -36,15 +35,17 @@ namespace Ninject.Planning.Bindings.Resolvers
         /// <summary>
         /// Returns any bindings from the specified collection that match the specified service.
         /// </summary>
-        /// <param name="bindings">The multimap of all registered bindings.</param>
+        /// <param name="bindings">The dictionary of all registered bindings.</param>
         /// <param name="service">The service in question.</param>
         /// <returns>The series of matching bindings.</returns>
-        public IEnumerable<IBinding> Resolve(IDictionary<Type, IEnumerable<IBinding>> bindings, Type service)
+        public ICollection<IBinding> Resolve(IDictionary<Type, ICollection<IBinding>> bindings, Type service)
         {
-            IEnumerable<IBinding> result;
-            return bindings.TryGetValue(service, out result)
-                ? result
-                : Enumerable.Empty<IBinding>();
+            if (!bindings.TryGetValue(service, out ICollection<IBinding> result))
+            {
+                return Array.Empty<IBinding>();
+            }
+
+            return result;
         }
     }
 }

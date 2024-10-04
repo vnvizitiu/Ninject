@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="IRequest.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,12 +17,13 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Activation
 {
     using System;
     using System.Collections.Generic;
+
     using Ninject.Parameters;
     using Ninject.Planning.Bindings;
     using Ninject.Planning.Targets;
@@ -62,7 +61,7 @@ namespace Ninject.Activation
         /// <summary>
         /// Gets the parameters that affect the resolution.
         /// </summary>
-        ICollection<IParameter> Parameters { get; }
+        IReadOnlyList<IParameter> Parameters { get; }
 
         /// <summary>
         /// Gets the stack of bindings which have been activated by either this request or its ancestors.
@@ -86,20 +85,20 @@ namespace Ninject.Activation
 
         /// <summary>
         /// Gets or sets a value indicating whether the request should force to return a unique value even if the request is optional.
-        /// If this value is set true the request will throw an ActivationException if there are multiple satisfying bindings rather
-        /// than returning null for the request is optional. For none optional requests this parameter does not change anything.
         /// </summary>
-        bool ForceUnique
-        {
-            get;
-            set;
-        }
+        /// <remarks>
+        /// If this value is <see langword="true"/>, the request will throw an <see cref="ActivationException"/> if there are multiple satisfying bindings rather
+        /// than returning <see langword="null"/> for the request is optional. For non-optional requests this parameter does not change anything.
+        /// </remarks>
+        bool ForceUnique { get; set; }
 
         /// <summary>
         /// Determines whether the specified binding satisfies the constraint defined on this request.
         /// </summary>
         /// <param name="binding">The binding.</param>
-        /// <returns><c>True</c> if the binding satisfies the constraint; otherwise <c>false</c>.</returns>
+        /// <returns>
+        /// <see langword="true"/> if the binding satisfies the constraint; otherwise, <see langword="false"/>.
+        /// </returns>
         bool Matches(IBinding binding);
 
         /// <summary>
@@ -114,7 +113,9 @@ namespace Ninject.Activation
         /// <param name="service">The service that is being requested.</param>
         /// <param name="parentContext">The context in which the request was made.</param>
         /// <param name="target">The target that will receive the injection.</param>
-        /// <returns>The child request.</returns>
+        /// <returns>
+        /// The child request.
+        /// </returns>
         IRequest CreateChild(Type service, IContext parentContext, ITarget target);
     }
 }

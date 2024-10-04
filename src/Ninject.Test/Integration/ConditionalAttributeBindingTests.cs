@@ -5,11 +5,11 @@
     using Xunit;
     using Attribute = System.Attribute;
 
-    public class WeakAttribute : Attribute
+    public sealed class WeakAttribute : Attribute
     {
     }
 
-    public class StrongAttribute : Attribute
+    public sealed class StrongAttribute : Attribute
     {
     }
 
@@ -101,7 +101,7 @@
 
         public override void Dispose( bool disposing )
         {
-            if ( disposing && !IsDisposed )
+            if ( disposing && !this.IsDisposed )
             {
                 this.kernel.Dispose();
                 this.kernel = null;

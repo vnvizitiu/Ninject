@@ -1,12 +1,10 @@
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 // <copyright file="IBindingRoot.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,11 +17,13 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Syntax
 {
     using System;
+
+    using Ninject.Components;
     using Ninject.Planning.Bindings;
 
     /// <summary>
@@ -31,6 +31,11 @@ namespace Ninject.Syntax
     /// </summary>
     public interface IBindingRoot : IFluentSyntax
     {
+        /// <summary>
+        /// Gets the component container, which holds components that contribute to Ninject.
+        /// </summary>
+        IComponentContainer Components { get; }
+
         /// <summary>
         /// Declares a binding for the specified service.
         /// </summary>
@@ -70,6 +75,8 @@ namespace Ninject.Syntax
         /// </summary>
         /// <param name="services">The services to bind.</param>
         /// <returns>The fluent syntax.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="services"/> contains zero items.</exception>
         IBindingToSyntax<object> Bind(params Type[] services);
 
         /// <summary>
@@ -82,6 +89,7 @@ namespace Ninject.Syntax
         /// Unregisters all bindings for the specified service.
         /// </summary>
         /// <param name="service">The service to unbind.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
         void Unbind(Type service);
 
         /// <summary>
@@ -123,18 +131,22 @@ namespace Ninject.Syntax
         /// </summary>
         /// <param name="services">The services to re-bind.</param>
         /// <returns>The fluent syntax.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="services"/> contains zero items.</exception>
         IBindingToSyntax<object> Rebind(params Type[] services);
 
         /// <summary>
         /// Registers the specified binding.
         /// </summary>
         /// <param name="binding">The binding to add.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
         void AddBinding(IBinding binding);
 
         /// <summary>
         /// Unregisters the specified binding.
         /// </summary>
         /// <param name="binding">The binding to remove.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="binding"/> is <see langword="null"/>.</exception>
         void RemoveBinding(IBinding binding);
     }
 }

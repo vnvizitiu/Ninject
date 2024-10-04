@@ -46,16 +46,12 @@ namespace Ninject.Tests.Integration
         {
             get
             {
-                // ReSharper disable CoVariantArrayConversion
                 yield return new Func<bool, IConstructorArgument>[] { inherited => new ConstructorArgument("weapon", new Sword(), inherited) };
-#if !MONO
                 yield return new Func<bool, IConstructorArgument>[] { inherited => new WeakConstructorArgument("weapon", new Sword(), inherited),  };
-#endif
                 yield return new Func<bool, IConstructorArgument>[]
                              {
                                  inherited => new TypeMatchingConstructorArgument(typeof(IWeapon), (context, target) => new Sword(), inherited)
                              };
-                // ReSharper restore CoVariantArrayConversion
             }
         }
 
@@ -63,13 +59,9 @@ namespace Ninject.Tests.Integration
         {
             get
             {
-                // ReSharper disable CoVariantArrayConversion
                 yield return new Func<IConstructorArgument>[] { () => new ConstructorArgument("weapon", new Sword()) };
-#if !MONO
                 yield return new Func<IConstructorArgument>[] { () => new WeakConstructorArgument("weapon", new Sword()),  };
-#endif
                 yield return new Func<IConstructorArgument>[] { () => new TypeMatchingConstructorArgument(typeof(IWeapon), (context, target) => new Sword()) };
-                // ReSharper restore CoVariantArrayConversion
             }
         }
 
@@ -80,42 +72,61 @@ namespace Ninject.Tests.Integration
 
 
         [Theory]
-        [MemberData("ConstructorArguments")]
+        [MemberData(nameof(ConstructorArguments))]
         public void ConstructorArgumentsArePassedToFirstLevel(Func<bool, IConstructorArgument> constructorArgument)
         {
             this.kernel.Bind<IWarrior>().To<Samurai>();
             this.kernel.Bind<IWeapon>().To<Dagger>();
 
-            var barracks = this.kernel.Get<Barracks>(constructorArgument(false));
+            var argument = constructorArgument(false);
 
-            barracks.Weapon.Should().BeOfType<Sword>();
+            var barracks = this.kernel.Get<Barracks>(argument);
+
+            if (argument is WeakConstructorArgument)
+            {
+                barracks.Weapon.Should().Match<IWeapon>(s => s == null || s is Sword);
+            }
+            else
+            {
+                barracks.Weapon.Should().BeOfType<Sword>();
+            }
+
             barracks.Warrior.Weapon.Should().BeOfType<Dagger>();
         }
 
         [Theory]
-        [MemberData("ConstructorArgumentsWithoutShouldInheritArgument")]
+        [MemberData(nameof(ConstructorArgumentsWithoutShouldInheritArgument))]
         public void ConstructorArgumentsAreNotInheritedIfNotSpecified(Func<IConstructorArgument> constructorArgument)
         {
             this.kernel.Bind<IWarrior>().To<Samurai>();
 
             Action getAction = () => this.kernel.Get<Barracks>(constructorArgument());
 
-            getAction.ShouldThrow<ActivationException>();
+            getAction.Should().Throw<ActivationException>();
         }
         
         [Theory]
-        [MemberData("ConstructorArguments")]
+        [MemberData(nameof(ConstructorArguments))]
         public void ConstructorArgumentsAreInheritedIfSpecified(Func<bool, IConstructorArgument> constructorArgument)
         {
             this.kernel.Bind<IWarrior>().To<Samurai>();
 
-            var barracks = this.kernel.Get<Barracks>(constructorArgument(true));
+            var argument = constructorArgument(true);
 
-            barracks.Weapon.Should().BeOfType<Sword>();
-            barracks.Warrior.Weapon.Should().BeOfType<Sword>();
+            var barracks = this.kernel.Get<Barracks>(argument);
+
+            if (argument is WeakConstructorArgument)
+            {
+                barracks.Weapon.Should().Match<IWeapon>(s => s == null || s is Sword);
+                barracks.Warrior.Weapon.Should().Match<IWeapon>(s => s == null || s is Sword);
+            }
+            else
+            {
+                barracks.Weapon.Should().BeOfType<Sword>();
+                barracks.Warrior.Weapon.Should().BeOfType<Sword>();
+            }
         }
 
-#if !MONO
         [Fact]
         public void WeakConstructorArgument()
         {
@@ -127,14 +138,20 @@ namespace Ninject.Tests.Integration
 
             var barracks = this.kernel.Get<Barracks>();
 
-            barracks.Weapon.Should().BeOfType<Sword>();
-            barracks.Warrior.Weapon.Should().BeOfType<Dagger>();
-            barracks.Weapon.Should().BeSameAs(weakReference.Target);
-            barracks.Weapon = null;
+            // Assert in separate method to allow weapon to be finalized
+            AssertWeapons(barracks, weakReference);
 
             GC.Collect();
 
             weakReference.IsAlive.Should().BeFalse();
+        }
+
+        private void AssertWeapons(Barracks barracks, WeakReference weaponReference)
+        {
+            barracks.Weapon.Should().BeOfType<Sword>();
+            barracks.Warrior.Weapon.Should().BeOfType<Dagger>();
+            barracks.Weapon.Should().BeSameAs(weaponReference.Target);
+            barracks.Weapon = null;
         }
 
 
@@ -144,7 +161,5 @@ namespace Ninject.Tests.Integration
             this.kernel.Get<Barracks>(new WeakConstructorArgument("weapon", sword));
             return new WeakReference(sword);
         }
-
-#endif
     }
 }

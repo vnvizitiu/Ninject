@@ -1,12 +1,10 @@
-﻿//-------------------------------------------------------------------------------------------------
+﻿// -------------------------------------------------------------------------------------------------
 // <copyright file="BindingConfigurationBuilder.cs" company="Ninject Project Contributors">
-//   Copyright (c) 2007-2010, Enkari, Ltd.
-//   Copyright (c) 2010-2016, Ninject Project Contributors
-//   Authors: Nate Kohari (nate@enkari.com)
-//            Remo Gloor (remo.gloor@gmail.com)
+//   Copyright (c) 2007-2010 Enkari, Ltd. All rights reserved.
+//   Copyright (c) 2010-2020 Ninject Project Contributors. All rights reserved.
 //
 //   Dual-licensed under the Apache License, Version 2.0, and the Microsoft Public License (Ms-PL).
-//   you may not use this file except in compliance with one of the Licenses.
+//   You may not use this file except in compliance with one of the Licenses.
 //   You may obtain a copy of the License at
 //
 //       http://www.apache.org/licenses/LICENSE-2.0
@@ -19,17 +17,16 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 // </copyright>
-//-------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
 
 namespace Ninject.Planning.Bindings
 {
     using System;
     using System.Linq;
 
-    using System.Reflection;
     using Ninject.Activation;
+    using Ninject.Components;
     using Ninject.Infrastructure;
-    using Ninject.Infrastructure.Introspection;
     using Ninject.Infrastructure.Language;
     using Ninject.Parameters;
     using Ninject.Planning.Targets;
@@ -46,13 +43,16 @@ namespace Ninject.Planning.Bindings
         /// </summary>
         private readonly string serviceNames;
 
-       /// <summary>
+        /// <summary>
         /// Initializes a new instance of the <see cref="BindingConfigurationBuilder{T}"/> class.
         /// </summary>
         /// <param name="bindingConfiguration">The binding configuration to build.</param>
         /// <param name="serviceNames">The names of the configured services.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="bindingConfiguration"/> is <see langword="null"/>.</exception>
         public BindingConfigurationBuilder(IBindingConfiguration bindingConfiguration, string serviceNames)
         {
+            Ensure.ArgumentNotNull(bindingConfiguration, nameof(bindingConfiguration));
+
             this.BindingConfiguration = bindingConfiguration;
             this.serviceNames = serviceNames;
         }
@@ -92,28 +92,28 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingInNamedWithOrOnSyntax<T> WhenInjectedInto(Type parent)
         {
-            if (parent.GetTypeInfo().IsGenericTypeDefinition)
+            if (parent.IsGenericTypeDefinition)
             {
-                if (parent.GetTypeInfo().IsInterface)
+                if (parent.IsInterface)
                 {
                     this.BindingConfiguration.Condition = r =>
                         r.Target != null &&
-                        r.Target.Member.DeclaringType.GetTypeInfo().ImplementedInterfaces.Any(i =>
-                            i.GetTypeInfo().IsGenericType &&
+                        r.Target.Member.ReflectedType.GetInterfaces().Any(i =>
+                            i.IsGenericType &&
                             i.GetGenericTypeDefinition() == parent);
                 }
                 else
                 {
                     this.BindingConfiguration.Condition = r =>
                         r.Target != null &&
-                        r.Target.Member.DeclaringType.GetAllBaseTypes().Any(i =>
-                            i.GetTypeInfo().IsGenericType &&
+                        r.Target.Member.ReflectedType.GetAllBaseTypes().Any(i =>
+                            i.IsGenericType &&
                             i.GetGenericTypeDefinition() == parent);
                 }
             }
             else
             {
-                this.BindingConfiguration.Condition = r => r.Target != null && parent.GetTypeInfo().IsAssignableFrom(r.Target.Member.DeclaringType.GetTypeInfo());
+                this.BindingConfiguration.Condition = r => r.Target != null && parent.IsAssignableFrom(r.Target.Member.ReflectedType);
             }
 
             return this;
@@ -131,30 +131,29 @@ namespace Ninject.Planning.Bindings
             {
                 foreach (var parent in parents)
                 {
-                    var matches = false;
-
-                    if (parent.GetTypeInfo().IsGenericTypeDefinition)
+                    bool matches = false;
+                    if (parent.IsGenericTypeDefinition)
                     {
-                        if (parent.GetTypeInfo().IsInterface)
+                        if (parent.IsInterface)
                         {
                             matches =
                                 r.Target != null &&
-                                r.Target.Member.DeclaringType.GetTypeInfo().ImplementedInterfaces.Any(i =>
-                                    i.GetTypeInfo().IsGenericType &&
+                                r.Target.Member.ReflectedType.GetInterfaces().Any(i =>
+                                    i.IsGenericType &&
                                     i.GetGenericTypeDefinition() == parent);
                         }
                         else
                         {
                             matches =
                                 r.Target != null &&
-                                r.Target.Member.DeclaringType.GetAllBaseTypes().Any(i =>
-                                    i.GetTypeInfo().IsGenericType &&
+                                r.Target.Member.ReflectedType.GetAllBaseTypes().Any(i =>
+                                    i.IsGenericType &&
                                     i.GetGenericTypeDefinition() == parent);
                         }
                     }
                     else
                     {
-                        matches = r.Target != null && parent.GetTypeInfo().IsAssignableFrom(r.Target.Member.DeclaringType.GetTypeInfo());
+                        matches = r.Target != null && parent.IsAssignableFrom(r.Target.Member.ReflectedType);
                     }
 
                     if (matches)
@@ -190,16 +189,16 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingInNamedWithOrOnSyntax<T> WhenInjectedExactlyInto(Type parent)
         {
-            if (parent.GetTypeInfo().IsGenericTypeDefinition)
+            if (parent.IsGenericTypeDefinition)
             {
                 this.BindingConfiguration.Condition = r =>
                     r.Target != null &&
-                    r.Target.Member.DeclaringType.GetTypeInfo().IsGenericType &&
-                    parent == r.Target.Member.DeclaringType.GetGenericTypeDefinition();
+                    r.Target.Member.ReflectedType.IsGenericType &&
+                    parent == r.Target.Member.ReflectedType.GetGenericTypeDefinition();
             }
             else
             {
-                this.BindingConfiguration.Condition = r => r.Target != null && r.Target.Member.DeclaringType == parent;
+                this.BindingConfiguration.Condition = r => r.Target != null && r.Target.Member.ReflectedType == parent;
             }
 
             return this;
@@ -209,7 +208,7 @@ namespace Ninject.Planning.Bindings
         /// Indicates that the binding should be used only for injections on the specified type.
         /// The type must match exactly the specified type. Types that derive from the specified type
         /// will not be considered as valid target.
-        /// Should match at least one of the specified targets
+        /// Should match at least one of the specified targets.
         /// </summary>
         /// <param name="parents">The types.</param>
         /// <returns>The fluent syntax.</returns>
@@ -219,18 +218,17 @@ namespace Ninject.Planning.Bindings
             {
                 foreach (var parent in parents)
                 {
-                    var matches = false;
-
-                    if (parent.GetTypeInfo().IsGenericTypeDefinition)
+                    bool matches = false;
+                    if (parent.IsGenericTypeDefinition)
                     {
                         matches =
                             r.Target != null &&
-                            r.Target.Member.DeclaringType.GetTypeInfo().IsGenericType &&
-                            parent == r.Target.Member.DeclaringType.GetTypeInfo().GetGenericTypeDefinition();
+                            r.Target.Member.ReflectedType.IsGenericType &&
+                            parent == r.Target.Member.ReflectedType.GetGenericTypeDefinition();
                     }
                     else
                     {
-                        matches = r.Target != null && r.Target.Member.DeclaringType == parent;
+                        matches = r.Target != null && r.Target.Member.ReflectedType == parent;
                     }
 
                     if (matches)
@@ -289,13 +287,12 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingInNamedWithOrOnSyntax<T> WhenClassHas(Type attributeType)
         {
-            if (!typeof(Attribute).GetTypeInfo().IsAssignableFrom(attributeType.GetTypeInfo()))
+            if (!typeof(Attribute).IsAssignableFrom(attributeType))
             {
                 throw new InvalidOperationException(ExceptionFormatter.InvalidAttributeTypeUsedInBindingCondition(this.serviceNames, "WhenClassHas", attributeType));
             }
 
-            this.BindingConfiguration.Condition = r => r.Target != null &&
-                                                       r.Target.Member.DeclaringType.GetTypeInfo().HasAttribute(attributeType);
+            this.BindingConfiguration.Condition = r => r.Target != null && r.Target.Member.ReflectedType.HasAttribute(attributeType);
 
             return this;
         }
@@ -308,12 +305,12 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingInNamedWithOrOnSyntax<T> WhenMemberHas(Type attributeType)
         {
-            if (!typeof(Attribute).GetTypeInfo().IsAssignableFrom(attributeType.GetTypeInfo()))
+            if (!typeof(Attribute).IsAssignableFrom(attributeType))
             {
                 throw new InvalidOperationException(ExceptionFormatter.InvalidAttributeTypeUsedInBindingCondition(this.serviceNames, "WhenMemberHas", attributeType));
             }
 
-            this.BindingConfiguration.Condition = r => r.Target != null && r.Target.Member.IsDefined(attributeType, true);
+            this.BindingConfiguration.Condition = r => r.Target != null && r.Target.Member.HasAttribute(attributeType);
 
             return this;
         }
@@ -326,7 +323,7 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingInNamedWithOrOnSyntax<T> WhenTargetHas(Type attributeType)
         {
-            if (!typeof(Attribute).GetTypeInfo().IsAssignableFrom(attributeType.GetTypeInfo()))
+            if (!typeof(Attribute).IsAssignableFrom(attributeType))
             {
                 throw new InvalidOperationException(ExceptionFormatter.InvalidAttributeTypeUsedInBindingCondition(this.serviceNames, "WhenTargetHas", attributeType));
             }
@@ -344,6 +341,7 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingInNamedWithOrOnSyntax<T> WhenParentNamed(string name)
         {
+            string.Intern(name);
             this.BindingConfiguration.Condition = r => r.ParentContext != null && string.Equals(r.ParentContext.Binding.Metadata.Name, name, StringComparison.Ordinal);
             return this;
         }
@@ -409,6 +407,7 @@ namespace Ninject.Planning.Bindings
         /// <returns>The fluent syntax.</returns>
         public IBindingWithOrOnSyntax<T> Named(string name)
         {
+            string.Intern(name);
             this.BindingConfiguration.Metadata.Name = name;
             return this;
         }
@@ -435,7 +434,6 @@ namespace Ninject.Planning.Bindings
             return this;
         }
 
-#if !NO_CURRENT_THREAD
         /// <summary>
         /// Indicates that instances activated via the binding should be re-used within the same thread.
         /// </summary>
@@ -445,7 +443,6 @@ namespace Ninject.Planning.Bindings
             this.BindingConfiguration.ScopeCallback = StandardScopeCallbacks.Thread;
             return this;
         }
-#endif
 
         /// <summary>
         /// Indicates that instances activated via the binding should be re-used as long as the object
@@ -531,7 +528,7 @@ namespace Ninject.Planning.Bindings
         /// <summary>
         /// Indicates that the specified constructor argument should be overridden with the specified value.
         /// </summary>
-        /// <typeparam name="TValue">Specifies the argument type to override.</typeparam>
+        /// <typeparam name="TValue">The type of the argument type to override.</typeparam>
         /// <param name="callback">The callback to invoke to get the value for the argument.</param>
         /// <returns>The fluent syntax.</returns>
         public IBindingWithOrOnSyntax<T> WithConstructorArgument<TValue>(Func<IContext, TValue> callback)
@@ -554,7 +551,7 @@ namespace Ninject.Planning.Bindings
         /// <summary>
         /// Indicates that the specified constructor argument should be overridden with the specified value.
         /// </summary>
-        /// <typeparam name="TValue">Specifies the argument type to override.</typeparam>
+        /// <typeparam name="TValue">The type of the argument type to override.</typeparam>
         /// <param name="callback">The callback to invoke to get the value for the argument.</param>
         /// <returns>The fluent syntax.</returns>
         public IBindingWithOrOnSyntax<T> WithConstructorArgument<TValue>(Func<IContext, ITarget, TValue> callback)
